@@ -1,0 +1,13 @@
+.venv/
+.coderace/
+.agent-relay/
+__pycache__/
+*.egg-info/
+*.pyc
+dist/
+build/
+
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+prpm.lock
