@@ -20,6 +20,9 @@ coderace init fix-auth-bug
 # Then race the agents:
 coderace run fix-auth-bug.yaml
 
+# Or race them in parallel (uses git worktrees):
+coderace run fix-auth-bug.yaml --parallel
+
 # View results from the last run
 coderace results fix-auth-bug.yaml
 ```
@@ -84,8 +87,19 @@ Results also saved as JSON in `.coderace/<task>-results.json`.
 | Claude Code | `claude` | `claude --print --output-format json -p "<task>"` |
 | Codex | `codex` | `codex --quiet --full-auto -p "<task>"` |
 | Aider | `aider` | `aider --message "<task>" --yes --no-auto-commits` |
+| Gemini CLI | `gemini` | `gemini --non-interactive -p "<task>"` |
 
 Each agent must be installed and authenticated separately.
+
+## Parallel Mode
+
+Use `--parallel` (or `-p`) to run all agents simultaneously using git worktrees. Each agent gets its own isolated working directory, so they don't interfere with each other.
+
+```bash
+coderace run task.yaml --parallel
+```
+
+Sequential mode (default) runs agents one at a time on the same repo.
 
 ## Requirements
 

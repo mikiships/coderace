@@ -117,3 +117,35 @@ def stash_pop(repo: Path) -> None:
         capture_output=True,
         text=True,
     )
+
+
+def add_worktree(repo: Path, worktree_path: Path, branch: str) -> None:
+    """Create a git worktree for a branch."""
+    result = subprocess.run(
+        ["git", "worktree", "add", str(worktree_path), branch],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to create worktree: {result.stderr.strip()}")
+
+
+def remove_worktree(repo: Path, worktree_path: Path) -> None:
+    """Remove a git worktree."""
+    subprocess.run(
+        ["git", "worktree", "remove", str(worktree_path), "--force"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
+
+def prune_worktrees(repo: Path) -> None:
+    """Prune stale worktree metadata."""
+    subprocess.run(
+        ["git", "worktree", "prune"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )

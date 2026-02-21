@@ -10,12 +10,15 @@ from rich.console import Console
 from coderace import __version__
 from coderace.adapters import ADAPTERS
 from coderace.git_ops import (
+    add_worktree,
     branch_name_for,
     checkout,
     create_branch,
     get_current_ref,
     get_diff_stat,
     has_uncommitted_changes,
+    prune_worktrees,
+    remove_worktree,
 )
 from coderace.reporter import print_results, save_results_json
 from coderace.scorer import compute_score
@@ -41,10 +44,69 @@ def init(
     console.print("Edit the file to define your task, then run: coderace run " + str(path))
 
 
+def _run_agent_sequential(
+    agent_name: str,
+    task_description: str,
+    repo: Path,
+    branch: str,
+    base_ref: str,
+    timeout: int,
+) -> tuple[AgentResult | None, int]:
+    """Run a single agent sequentially (on the main repo). Returns (result, lines_changed)."""
+    try:
+        create_branch(repo, branch, base_ref)
+    except Exception:
+        return None, 0
+
+    adapter = ADAPTERS[agent_name]()
+    result = adapter.run(task_description, repo, timeout)
+
+    _, lines = get_diff_stat(repo, base_ref)
+    return result, lines
+
+
+def _run_agent_worktree(
+    agent_name: str,
+    task_description: str,
+    repo: Path,
+    branch: str,
+    base_ref: str,
+    timeout: int,
+) -> tuple[AgentResult | None, int]:
+    """Run a single agent in a git worktree (for parallel execution)."""
+    import tempfile
+
+    worktree_dir = Path(tempfile.mkdtemp(prefix=f"coderace-{agent_name}-"))
+
+    try:
+        # Create branch first (from main repo)
+        create_branch(repo, branch, base_ref)
+        # Checkout back so worktree can use the branch
+        checkout(repo, base_ref)
+        # Create worktree
+        add_worktree(repo, worktree_dir, branch)
+
+        adapter = ADAPTERS[agent_name]()
+        result = adapter.run(task_description, worktree_dir, timeout)
+
+        _, lines = get_diff_stat(worktree_dir, base_ref)
+        return result, lines
+    except Exception:
+        return None, 0
+    finally:
+        remove_worktree(repo, worktree_dir)
+        # Clean up temp dir if it still exists
+        import shutil
+
+        if worktree_dir.exists():
+            shutil.rmtree(worktree_dir, ignore_errors=True)
+
+
 @app.command()
 def run(
     task_file: Path = typer.Argument(help="Path to task YAML file"),
     agents: list[str] | None = typer.Option(None, "--agent", "-a", help="Override agent list"),
+    parallel: bool = typer.Option(False, "--parallel", "-p", help="Run agents in parallel"),
 ) -> None:
     """Run all agents on a task and score the results."""
     task = load_task(task_file)
@@ -62,56 +124,102 @@ def run(
         raise typer.Exit(1)
 
     base_ref = get_current_ref(repo)
-    console.print(f"[dim]Base ref: {base_ref[:8]}[/dim]")
+    mode = "parallel" if parallel else "sequential"
+    console.print(f"[dim]Base ref: {base_ref[:8]} | Mode: {mode}[/dim]")
     console.print(f"[dim]Task: {task.name}[/dim]")
     console.print(f"[dim]Agents: {', '.join(task.agents)}[/dim]")
     console.print()
 
-    results: list[AgentResult] = []
+    # Validate agents
+    valid_agents = [a for a in task.agents if a in ADAPTERS]
+    invalid = set(task.agents) - set(valid_agents)
+    for name in invalid:
+        console.print(f"[red]Unknown agent: {name}[/red]")
+
+    if not valid_agents:
+        console.print("[red]No valid agents to run.[/red]")
+        raise typer.Exit(1)
+
+    agent_results: list[AgentResult] = []
     diff_lines_map: dict[str, int] = {}
 
-    for agent_name in task.agents:
-        if agent_name not in ADAPTERS:
-            console.print(f"[red]Unknown agent: {agent_name}[/red]")
-            continue
+    if parallel and len(valid_agents) > 1:
+        console.print("[cyan]Racing agents in parallel...[/cyan]")
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        branch = branch_name_for(task.name, agent_name)
-        console.print(f"[cyan]Running {agent_name}...[/cyan]")
+        futures = {}
+        with ThreadPoolExecutor(max_workers=len(valid_agents)) as executor:
+            for agent_name in valid_agents:
+                branch = branch_name_for(task.name, agent_name)
+                future = executor.submit(
+                    _run_agent_worktree,
+                    agent_name,
+                    task.description,
+                    repo,
+                    branch,
+                    base_ref,
+                    task.timeout,
+                )
+                futures[future] = agent_name
 
-        # Create branch and run agent
-        try:
-            create_branch(repo, branch, base_ref)
-        except Exception as e:
-            console.print(f"[red]Failed to create branch for {agent_name}: {e}[/red]")
-            continue
+            for future in as_completed(futures):
+                agent_name = futures[future]
+                result, lines = future.result()
+                if result:
+                    agent_results.append(result)
+                    diff_lines_map[agent_name] = lines
+                    if result.timed_out:
+                        console.print(
+                            f"  [yellow]{agent_name}: timed out after {task.timeout}s[/yellow]"
+                        )
+                    elif result.exit_code != 0:
+                        console.print(
+                            f"  [yellow]{agent_name}: exit code {result.exit_code}[/yellow]"
+                        )
+                    else:
+                        console.print(
+                            f"  [green]{agent_name}: completed in {result.wall_time:.1f}s[/green]"
+                        )
+                else:
+                    console.print(f"  [red]{agent_name}: failed to run[/red]")
 
-        adapter = ADAPTERS[agent_name]()
-        result = adapter.run(task.description, repo, task.timeout)
-        results.append(result)
+        prune_worktrees(repo)
+    else:
+        # Sequential mode
+        for agent_name in valid_agents:
+            branch = branch_name_for(task.name, agent_name)
+            console.print(f"[cyan]Running {agent_name}...[/cyan]")
 
-        # Get diff stats while still on the branch
-        _, lines = get_diff_stat(repo, base_ref)
-        diff_lines_map[agent_name] = lines
+            result, lines = _run_agent_sequential(
+                agent_name, task.description, repo, branch, base_ref, task.timeout
+            )
 
-        if result.timed_out:
-            console.print(f"  [yellow]Timed out after {task.timeout}s[/yellow]")
-        elif result.exit_code != 0:
-            console.print(f"  [yellow]Exit code: {result.exit_code}[/yellow]")
-        else:
-            console.print(f"  [green]Completed in {result.wall_time:.1f}s[/green]")
+            if result is None:
+                console.print(f"  [red]Failed to create branch for {agent_name}[/red]")
+                continue
 
-        console.print(f"  [dim]Lines changed: {lines}[/dim]")
+            agent_results.append(result)
+            diff_lines_map[agent_name] = lines
 
-    if not results:
+            if result.timed_out:
+                console.print(f"  [yellow]Timed out after {task.timeout}s[/yellow]")
+            elif result.exit_code != 0:
+                console.print(f"  [yellow]Exit code: {result.exit_code}[/yellow]")
+            else:
+                console.print(f"  [green]Completed in {result.wall_time:.1f}s[/green]")
+
+            console.print(f"  [dim]Lines changed: {lines}[/dim]")
+
+    if not agent_results:
         console.print("[red]No agents ran successfully.[/red]")
         raise typer.Exit(1)
 
-    # Score each agent (need to checkout each branch for test/lint)
-    all_wall_times = [r.wall_time for r in results]
-    all_diff_lines = [diff_lines_map.get(r.agent, 0) for r in results]
+    # Score each agent (checkout each branch for test/lint)
+    all_wall_times = [r.wall_time for r in agent_results]
+    all_diff_lines = [diff_lines_map.get(r.agent, 0) for r in agent_results]
     scores: list[Score] = []
 
-    for result in results:
+    for result in agent_results:
         branch = branch_name_for(task.name, result.agent)
         checkout(repo, branch)
 

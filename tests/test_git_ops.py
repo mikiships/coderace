@@ -5,12 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from coderace.git_ops import (
+    add_worktree,
     branch_name_for,
     checkout,
     create_branch,
     get_current_ref,
     get_diff_stat,
     has_uncommitted_changes,
+    remove_worktree,
 )
 
 
@@ -70,3 +72,16 @@ def test_has_uncommitted_changes(tmp_repo: Path) -> None:
     assert not has_uncommitted_changes(tmp_repo)
     (tmp_repo / "dirty.txt").write_text("dirty")
     assert has_uncommitted_changes(tmp_repo)
+
+
+def test_worktree_add_and_remove(tmp_repo: Path, tmp_path: Path) -> None:
+    base = get_current_ref(tmp_repo)
+    create_branch(tmp_repo, "wt-test", base)
+    checkout(tmp_repo, "main")
+
+    wt_path = tmp_path / "worktree"
+    add_worktree(tmp_repo, wt_path, "wt-test")
+    assert wt_path.exists()
+    assert (wt_path / "README.md").exists()
+
+    remove_worktree(tmp_repo, wt_path)

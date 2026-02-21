@@ -6,6 +6,7 @@ from coderace.adapters import ADAPTERS
 from coderace.adapters.aider import AiderAdapter
 from coderace.adapters.claude import ClaudeAdapter
 from coderace.adapters.codex import CodexAdapter
+from coderace.adapters.gemini import GeminiAdapter
 
 
 def test_claude_command() -> None:
@@ -34,14 +35,24 @@ def test_aider_command() -> None:
     assert "Fix the bug" in cmd
 
 
+def test_gemini_command() -> None:
+    adapter = GeminiAdapter()
+    cmd = adapter.build_command("Fix the bug")
+    assert cmd[0] == "gemini"
+    assert "--non-interactive" in cmd
+    assert "Fix the bug" in cmd
+
+
 def test_adapters_registry() -> None:
     assert "claude" in ADAPTERS
     assert "codex" in ADAPTERS
     assert "aider" in ADAPTERS
-    assert len(ADAPTERS) == 3
+    assert "gemini" in ADAPTERS
+    assert len(ADAPTERS) == 4
 
 
 def test_adapter_names() -> None:
     assert ClaudeAdapter().name == "claude"
     assert CodexAdapter().name == "codex"
     assert AiderAdapter().name == "aider"
+    assert GeminiAdapter().name == "gemini"

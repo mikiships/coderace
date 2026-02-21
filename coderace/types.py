@@ -29,7 +29,7 @@ class Task:
             errors.append("test_command is required")
         if not self.agents:
             errors.append("At least one agent is required")
-        known = {"claude", "codex", "aider"}
+        known = {"claude", "codex", "aider", "gemini"}
         for agent in self.agents:
             if agent not in known:
                 errors.append(f"Unknown agent: {agent!r} (known: {', '.join(sorted(known))})")
