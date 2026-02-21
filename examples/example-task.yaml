@@ -1,0 +1,23 @@
+name: add-timeout-support
+description: |
+  Add a timeout parameter to the @agentcontract decorator.
+  When set, the contract should fail if the decorated function
+  takes longer than the specified number of seconds.
+
+  Example usage:
+    @agentcontract(timeout=5.0)
+    def slow_function():
+        ...
+
+  Implementation notes:
+  - Add a `timeout` parameter to the decorator in src/pytest_agentcontract/decorator.py
+  - Use signal.alarm or threading.Timer for the timeout mechanism
+  - Add tests in tests/ for: timeout triggers, timeout not triggered, timeout=None (default)
+  - Update the ContractViolation to include timeout info
+repo: .
+test_command: pytest tests/ -x -q
+lint_command: ruff check src/
+timeout: 300
+agents:
+  - claude
+  - codex
