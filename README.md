@@ -1,8 +1,10 @@
 # coderace
 
-Race coding agents against each other on real tasks in your repo.
+Stop reading blog comparisons. Race coding agents against each other on real tasks in *your* repo with *your* code.
 
-Define a task. Run it against Claude Code, Codex, and Aider. Get a scored comparison table.
+Every week there's a new "Claude Code vs Codex vs Cursor" post. They test on toy problems with cherry-picked examples. coderace gives you automated, reproducible, scored comparisons on the tasks you actually care about.
+
+Define a task. Run it against Claude Code, Codex, Aider, and Gemini CLI. Get a scored comparison table.
 
 ## Install
 
@@ -100,6 +102,18 @@ coderace run task.yaml --parallel
 ```
 
 Sequential mode (default) runs agents one at a time on the same repo.
+
+## Why coderace?
+
+**Blog posts compare models. coderace compares agents on your work.**
+
+- Run on your actual codebase, not HumanEval
+- Automated scoring: tests, lint, time, lines changed
+- Parallel mode with git worktrees (no interference between agents)
+- JSON output for CI integration and tracking over time
+- Works with any agent that has a CLI
+
+The goal isn't "which model is best." It's "which agent solves my specific problem best."
 
 ## Requirements
 
