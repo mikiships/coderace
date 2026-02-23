@@ -1,0 +1,37 @@
+name: fix-edge-case
+description: |
+  There is a bug in the validation logic that causes incorrect behavior
+  when inputs contain empty strings or None values.
+  
+  Steps to reproduce:
+  1. Call the function with an empty string argument
+  2. Expected: clear validation error
+  3. Actual: AttributeError or silent wrong result
+  
+  Fix the edge case handling in the relevant module.
+  
+  Requirements:
+  - Fix the bug without changing the behavior for valid inputs
+  - Add a test that specifically covers the empty string case
+  - Add a test that covers the None input case
+  - All existing tests must still pass after the fix
+  
+  IMPORTANT: Describe the actual bug in your repo here. This is a template.
+  Edit the description above to match the real bug you want agents to fix.
+
+repo: .
+test_command: pytest tests/ -x -q
+lint_command: ruff check .
+timeout: 300
+agents:
+  - claude
+  - codex
+  - aider
+  - opencode
+# Standard weights -- balanced between correctness and efficiency
+scoring:
+  tests: 40
+  exit: 20
+  lint: 15
+  time: 15
+  lines: 10

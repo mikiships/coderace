@@ -1,0 +1,37 @@
+name: write-tests
+description: |
+  The core module has insufficient test coverage. Write tests that cover
+  the following scenarios that are currently untested:
+  
+  1. Happy path: standard valid input produces the expected output
+  2. Empty input: empty list, empty string, or None where relevant
+  3. Boundary values: minimum and maximum valid values
+  4. Error handling: invalid input raises the expected exception type
+  5. Idempotency: calling the function twice with the same input gives the same result
+  
+  Requirements:
+  - Tests must be in pytest format
+  - Each test function must have a clear docstring explaining what it tests
+  - Tests must be deterministic (no random values, no time dependencies)
+  - Do not modify any production code -- tests only
+  - Coverage should increase measurably (run pytest --cov if available)
+  
+  IMPORTANT: This is a template. Edit the description above to name the specific
+  module and functions you want tested in your repo.
+
+repo: .
+test_command: pytest tests/ -x -q
+lint_command: ruff check .
+timeout: 300
+agents:
+  - claude
+  - codex
+  - aider
+  - opencode
+# Weight tests heavily -- that's the whole point
+scoring:
+  tests: 60
+  exit: 20
+  lint: 10
+  time: 5
+  lines: 5

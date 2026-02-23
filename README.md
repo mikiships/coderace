@@ -80,16 +80,71 @@ Terminal table with Rich formatting:
 └──────┴────────┴───────┴───────┴──────┴──────┴──────────┴───────┘
 ```
 
-Results also saved as JSON in `.coderace/<task>-results.json`.
+Results also saved as JSON in `.coderace/<task>-results.json` and as a self-contained HTML report in `.coderace/<task>-results.html`.
+
+## Try It Now
+
+The `examples/` directory has ready-to-use task templates:
+
+```bash
+# Race agents on adding type hints to your project
+coderace run examples/add-type-hints.yaml
+
+# Race agents on fixing an edge case bug
+coderace run examples/fix-edge-case.yaml
+
+# Race agents on writing new tests
+coderace run examples/write-tests.yaml
+```
+
+Edit the `repo` and `description` fields to point at your actual project and describe your real task.
+
+## Statistical Mode
+
+Run each agent multiple times and get mean ± stddev:
+
+```bash
+coderace run task.yaml --runs 5
+```
+
+Useful for tasks with variable outcomes (LLM nondeterminism is real).
+
+## HTML Reports
+
+Export results as a shareable single-file HTML report:
+
+```bash
+# Auto-generated on every run at .coderace/<task>-results.html
+# Or export manually:
+coderace results task.yaml --html report.html
+```
+
+The HTML report has sortable columns and a dark theme. Drop it in a blog post or Slack.
+
+## Custom Scoring
+
+Override the default weights in your task YAML:
+
+```yaml
+scoring:
+  tests: 60   # tests passing (default 40)
+  exit: 20    # clean exit (default 20)
+  lint: 10    # lint clean (default 15)
+  time: 5     # wall time (default 15)
+  lines: 5    # lines changed (default 10)
+```
+
+Weights are normalized automatically (don't need to sum to 100).
 
 ## Supported Agents
 
-| Agent | CLI | Command |
-|-------|-----|---------|
-| Claude Code | `claude` | `claude --print --output-format json -p "<task>"` |
-| Codex | `codex` | `codex --quiet --full-auto -p "<task>"` |
-| Aider | `aider` | `aider --message "<task>" --yes --no-auto-commits` |
-| Gemini CLI | `gemini` | `gemini --non-interactive -p "<task>"` |
+| Agent | CLI | Notes |
+|-------|-----|-------|
+| Claude Code | `claude` | Anthropic's coding agent |
+| Codex | `codex` | OpenAI Codex CLI |
+| Aider | `aider` | Git-integrated AI coding |
+| Gemini CLI | `gemini` | Google's Gemini CLI |
+| OpenCode | `opencode` | Open-source terminal agent |
 
 Each agent must be installed and authenticated separately.
 

@@ -1,0 +1,31 @@
+name: add-type-hints
+description: |
+  Add type hints to all public functions and methods in this project.
+  
+  Requirements:
+  - Add parameter type annotations and return type annotations
+  - Use Python 3.10+ union syntax (X | Y instead of Optional[X])
+  - Do not change any logic or behavior -- type hints only
+  - All existing tests must continue to pass
+  - Mypy or pyright should report no new errors for the annotated files
+  
+  Focus on the files in src/ (or the main package directory).
+  Skip test files and __init__.py files with no public API.
+
+# Point repo at the project you want to benchmark on:
+repo: .
+test_command: pytest tests/ -x -q
+lint_command: ruff check .
+timeout: 300
+agents:
+  - claude
+  - codex
+  - aider
+  - opencode
+# Prioritize correctness over speed for this task
+scoring:
+  tests: 50
+  exit: 20
+  lint: 20
+  time: 5
+  lines: 5

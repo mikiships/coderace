@@ -6,6 +6,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from coderace import __version__
 from coderace.cli import app
 
 runner = CliRunner()
@@ -20,7 +21,7 @@ def test_help() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "0.1" in result.output
+    assert __version__ in result.output
 
 
 def test_init(tmp_path: Path) -> None:
