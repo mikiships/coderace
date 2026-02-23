@@ -4,7 +4,7 @@ Stop reading blog comparisons. Race coding agents against each other on real tas
 
 Every week there's a new "Claude Code vs Codex vs Cursor" post. They test on toy problems with cherry-picked examples. coderace gives you automated, reproducible, scored comparisons on the tasks you actually care about.
 
-Define a task. Run it against Claude Code, Codex, Aider, and Gemini CLI. Get a scored comparison table.
+Define a task. Run it against Claude Code, Codex, Aider, Gemini CLI, and OpenCode. Get a scored comparison table.
 
 ## Install
 
