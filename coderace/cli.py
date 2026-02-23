@@ -245,12 +245,22 @@ def run(
     results_dir = Path(task_file).parent / ".coderace"
     json_path = results_dir / f"{task.name}-results.json"
     save_results_json(scores, json_path)
+
+    from coderace.html_report import save_html_report
+
+    html_path = results_dir / f"{task.name}-results.html"
+    save_html_report(scores, html_path, task_name=task.name, weights=task.get_weights())
+
     console.print(f"\n[dim]Results saved to {json_path}[/dim]")
+    console.print(f"[dim]HTML report: {html_path}[/dim]")
 
 
 @app.command()
 def results(
     task_file: Path = typer.Argument(help="Path to task YAML file"),
+    html_output: Path | None = typer.Option(
+        None, "--html", help="Export as HTML report"
+    ),
 ) -> None:
     """Show results from the last run."""
     task = load_task(task_file)
@@ -291,6 +301,29 @@ def results(
         )
 
     console.print(table)
+
+    if html_output is not None:
+        from coderace.html_report import save_html_report
+        from coderace.types import Score as ScoreType
+        from coderace.types import ScoreBreakdown
+
+        # Reconstruct Score objects from JSON data for HTML report
+        score_objects = [
+            ScoreType(
+                agent=entry["agent"],
+                composite=entry["composite_score"],
+                breakdown=ScoreBreakdown(
+                    tests_pass=entry["breakdown"]["tests_pass"],
+                    exit_clean=entry["breakdown"]["exit_clean"],
+                    lint_clean=entry["breakdown"]["lint_clean"],
+                    wall_time=entry["breakdown"]["wall_time"],
+                    lines_changed=entry["breakdown"]["lines_changed"],
+                ),
+            )
+            for entry in data
+        ]
+        save_html_report(score_objects, html_output, task_name=task.name)
+        console.print(f"\n[dim]HTML report saved to {html_output}[/dim]")
 
 
 @app.command()
