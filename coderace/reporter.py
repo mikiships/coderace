@@ -88,5 +88,65 @@ def load_results_json(path: Path) -> list[dict]:
     return data.get("results", [])
 
 
+def print_stats_results(
+    stats: list,
+    console: Console | None = None,
+) -> str:
+    """Print a rich table of statistical results."""
+    from coderace.stats import AgentStats
+
+    console = console or Console()
+    table = Table(
+        title="coderace results (statistical)", show_lines=True
+    )
+    table.add_column("Rank", justify="center", style="bold")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Runs", justify="center")
+    table.add_column("Score", justify="right", style="bold green")
+    table.add_column("Tests %", justify="center")
+    table.add_column("Exit %", justify="center")
+    table.add_column("Lint %", justify="center")
+    table.add_column("Time (s)", justify="right")
+    table.add_column("Lines", justify="right")
+
+    for i, s in enumerate(stats, 1):
+        assert isinstance(s, AgentStats)
+        score_str = (
+            f"{s.score_mean:.1f}"
+            if s.score_stddev == 0
+            else f"{s.score_mean:.1f} \u00b1{s.score_stddev:.1f}"
+        )
+        time_str = (
+            f"{s.time_mean:.1f}"
+            if s.time_stddev == 0
+            else f"{s.time_mean:.1f} \u00b1{s.time_stddev:.1f}"
+        )
+        lines_str = (
+            f"{s.lines_mean:.0f}"
+            if s.lines_stddev == 0
+            else f"{s.lines_mean:.0f} \u00b1{s.lines_stddev:.0f}"
+        )
+        table.add_row(
+            str(i),
+            s.agent,
+            str(s.runs),
+            score_str,
+            f"{s.tests_pass_rate * 100:.0f}%",
+            f"{s.exit_clean_rate * 100:.0f}%",
+            f"{s.lint_clean_rate * 100:.0f}%",
+            time_str,
+            lines_str,
+        )
+
+    console.print(table)
+
+    str_console = Console(
+        file=None, force_terminal=False, width=120
+    )
+    with str_console.capture() as capture:
+        str_console.print(table)
+    return capture.get()
+
+
 def _bool_icon(val: bool) -> str:
     return "[green]PASS[/green]" if val else "[red]FAIL[/red]"

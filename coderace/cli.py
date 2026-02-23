@@ -105,11 +105,22 @@ def _run_agent_worktree(
 @app.command()
 def run(
     task_file: Path = typer.Argument(help="Path to task YAML file"),
-    agents: list[str] | None = typer.Option(None, "--agent", "-a", help="Override agent list"),
-    parallel: bool = typer.Option(False, "--parallel", "-p", help="Run agents in parallel"),
+    agents: list[str] | None = typer.Option(
+        None, "--agent", "-a", help="Override agent list"
+    ),
+    parallel: bool = typer.Option(
+        False, "--parallel", "-p", help="Run agents in parallel"
+    ),
+    runs: int = typer.Option(
+        1, "--runs", "-n", help="Number of runs (>1 for stats)"
+    ),
 ) -> None:
     """Run all agents on a task and score the results."""
     task = load_task(task_file)
+
+    if runs < 1:
+        console.print("[red]--runs must be >= 1[/red]")
+        raise typer.Exit(1)
 
     if agents:
         task.agents = agents
@@ -140,19 +151,97 @@ def run(
         console.print("[red]No valid agents to run.[/red]")
         raise typer.Exit(1)
 
-    agent_results: list[AgentResult] = []
-    diff_lines_map: dict[str, int] = {}
+    if runs > 1:
+        console.print(
+            f"[dim]Statistical mode: {runs} runs[/dim]"
+        )
 
-    if parallel and len(valid_agents) > 1:
-        console.print("[cyan]Racing agents in parallel...[/cyan]")
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+    all_run_scores: list[list[Score]] = []
 
-        futures = {}
-        with ThreadPoolExecutor(max_workers=len(valid_agents)) as executor:
+    for run_idx in range(1, runs + 1):
+        run_suffix = f"-run{run_idx}" if runs > 1 else ""
+
+        if runs > 1:
+            console.print(
+                f"\n[bold]Run {run_idx}/{runs}[/bold]"
+            )
+
+        agent_results: list[AgentResult] = []
+        diff_lines_map: dict[str, int] = {}
+
+        if parallel and len(valid_agents) > 1:
+            console.print(
+                "[cyan]Racing agents in parallel...[/cyan]"
+            )
+            from concurrent.futures import (
+                ThreadPoolExecutor,
+                as_completed,
+            )
+
+            futures = {}
+            with ThreadPoolExecutor(
+                max_workers=len(valid_agents)
+            ) as executor:
+                for agent_name in valid_agents:
+                    branch = (
+                        branch_name_for(task.name, agent_name)
+                        + run_suffix
+                    )
+                    future = executor.submit(
+                        _run_agent_worktree,
+                        agent_name,
+                        task.description,
+                        repo,
+                        branch,
+                        base_ref,
+                        task.timeout,
+                    )
+                    futures[future] = agent_name
+
+                for future in as_completed(futures):
+                    agent_name = futures[future]
+                    result, lines = future.result()
+                    if result:
+                        agent_results.append(result)
+                        diff_lines_map[agent_name] = lines
+                        if result.timed_out:
+                            console.print(
+                                f"  [yellow]{agent_name}: "
+                                f"timed out after "
+                                f"{task.timeout}s[/yellow]"
+                            )
+                        elif result.exit_code != 0:
+                            console.print(
+                                f"  [yellow]{agent_name}: "
+                                f"exit code "
+                                f"{result.exit_code}[/yellow]"
+                            )
+                        else:
+                            console.print(
+                                f"  [green]{agent_name}: "
+                                f"completed in "
+                                f"{result.wall_time:.1f}s"
+                                f"[/green]"
+                            )
+                    else:
+                        console.print(
+                            f"  [red]{agent_name}: "
+                            f"failed to run[/red]"
+                        )
+
+            prune_worktrees(repo)
+        else:
+            # Sequential mode
             for agent_name in valid_agents:
-                branch = branch_name_for(task.name, agent_name)
-                future = executor.submit(
-                    _run_agent_worktree,
+                branch = (
+                    branch_name_for(task.name, agent_name)
+                    + run_suffix
+                )
+                console.print(
+                    f"[cyan]Running {agent_name}...[/cyan]"
+                )
+
+                result, lines = _run_agent_sequential(
                     agent_name,
                     task.description,
                     repo,
@@ -160,99 +249,179 @@ def run(
                     base_ref,
                     task.timeout,
                 )
-                futures[future] = agent_name
 
-            for future in as_completed(futures):
-                agent_name = futures[future]
-                result, lines = future.result()
-                if result:
-                    agent_results.append(result)
-                    diff_lines_map[agent_name] = lines
-                    if result.timed_out:
-                        console.print(
-                            f"  [yellow]{agent_name}: timed out after {task.timeout}s[/yellow]"
-                        )
-                    elif result.exit_code != 0:
-                        console.print(
-                            f"  [yellow]{agent_name}: exit code {result.exit_code}[/yellow]"
-                        )
-                    else:
-                        console.print(
-                            f"  [green]{agent_name}: completed in {result.wall_time:.1f}s[/green]"
-                        )
+                if result is None:
+                    console.print(
+                        f"  [red]Failed to create branch "
+                        f"for {agent_name}[/red]"
+                    )
+                    continue
+
+                agent_results.append(result)
+                diff_lines_map[agent_name] = lines
+
+                if result.timed_out:
+                    console.print(
+                        f"  [yellow]Timed out after "
+                        f"{task.timeout}s[/yellow]"
+                    )
+                elif result.exit_code != 0:
+                    console.print(
+                        f"  [yellow]Exit code: "
+                        f"{result.exit_code}[/yellow]"
+                    )
                 else:
-                    console.print(f"  [red]{agent_name}: failed to run[/red]")
+                    console.print(
+                        f"  [green]Completed in "
+                        f"{result.wall_time:.1f}s[/green]"
+                    )
 
-        prune_worktrees(repo)
-    else:
-        # Sequential mode
-        for agent_name in valid_agents:
-            branch = branch_name_for(task.name, agent_name)
-            console.print(f"[cyan]Running {agent_name}...[/cyan]")
+                console.print(
+                    f"  [dim]Lines changed: {lines}[/dim]"
+                )
 
-            result, lines = _run_agent_sequential(
-                agent_name, task.description, repo, branch, base_ref, task.timeout
+        if not agent_results:
+            console.print(
+                "[red]No agents ran successfully.[/red]"
             )
+            if run_idx == 1:
+                raise typer.Exit(1)
+            continue
 
-            if result is None:
-                console.print(f"  [red]Failed to create branch for {agent_name}[/red]")
-                continue
+        # Score each agent
+        all_wall_times = [r.wall_time for r in agent_results]
+        all_diff_lines = [
+            diff_lines_map.get(r.agent, 0)
+            for r in agent_results
+        ]
+        scores: list[Score] = []
 
-            agent_results.append(result)
-            diff_lines_map[agent_name] = lines
+        for result in agent_results:
+            branch = (
+                branch_name_for(task.name, result.agent)
+                + run_suffix
+            )
+            checkout(repo, branch)
 
-            if result.timed_out:
-                console.print(f"  [yellow]Timed out after {task.timeout}s[/yellow]")
-            elif result.exit_code != 0:
-                console.print(f"  [yellow]Exit code: {result.exit_code}[/yellow]")
-            else:
-                console.print(f"  [green]Completed in {result.wall_time:.1f}s[/green]")
+            score = compute_score(
+                result=result,
+                test_command=task.test_command,
+                lint_command=task.lint_command,
+                workdir=repo,
+                diff_lines=diff_lines_map.get(result.agent, 0),
+                all_wall_times=all_wall_times,
+                all_diff_lines=all_diff_lines,
+                weights=task.get_weights(),
+            )
+            scores.append(score)
 
-            console.print(f"  [dim]Lines changed: {lines}[/dim]")
+        # Return to base ref
+        checkout(repo, base_ref)
+        all_run_scores.append(scores)
 
-    if not agent_results:
-        console.print("[red]No agents ran successfully.[/red]")
-        raise typer.Exit(1)
+    # Display results
+    console.print()
 
-    # Score each agent (checkout each branch for test/lint)
-    all_wall_times = [r.wall_time for r in agent_results]
-    all_diff_lines = [diff_lines_map.get(r.agent, 0) for r in agent_results]
-    scores: list[Score] = []
+    if runs == 1 and all_run_scores:
+        # Single run: show normal table
+        scores = all_run_scores[0]
+        print_results(scores, console)
 
-    for result in agent_results:
-        branch = branch_name_for(task.name, result.agent)
-        checkout(repo, branch)
+        results_dir = Path(task_file).parent / ".coderace"
+        json_path = results_dir / f"{task.name}-results.json"
+        save_results_json(scores, json_path)
 
-        score = compute_score(
-            result=result,
-            test_command=task.test_command,
-            lint_command=task.lint_command,
-            workdir=repo,
-            diff_lines=diff_lines_map.get(result.agent, 0),
-            all_wall_times=all_wall_times,
-            all_diff_lines=all_diff_lines,
+        from coderace.html_report import save_html_report
+
+        html_path = results_dir / f"{task.name}-results.html"
+        save_html_report(
+            scores,
+            html_path,
+            task_name=task.name,
             weights=task.get_weights(),
         )
-        scores.append(score)
 
-    # Return to base ref
-    checkout(repo, base_ref)
+        console.print(
+            f"\n[dim]Results saved to {json_path}[/dim]"
+        )
+        console.print(f"[dim]HTML report: {html_path}[/dim]")
+    elif all_run_scores:
+        # Multi-run: show stats table
+        from coderace.reporter import print_stats_results
+        from coderace.stats import aggregate_runs
 
-    # Display and save results
-    console.print()
-    print_results(scores, console)
+        stats = aggregate_runs(all_run_scores)
+        print_stats_results(stats, console)
 
-    results_dir = Path(task_file).parent / ".coderace"
-    json_path = results_dir / f"{task.name}-results.json"
-    save_results_json(scores, json_path)
+        # Also save per-run JSON
+        results_dir = Path(task_file).parent / ".coderace"
+        json_path = (
+            results_dir / f"{task.name}-stats-results.json"
+        )
+        _save_stats_json(all_run_scores, stats, json_path)
 
-    from coderace.html_report import save_html_report
+        console.print(
+            f"\n[dim]Stats results saved to {json_path}[/dim]"
+        )
 
-    html_path = results_dir / f"{task.name}-results.html"
-    save_html_report(scores, html_path, task_name=task.name, weights=task.get_weights())
 
-    console.print(f"\n[dim]Results saved to {json_path}[/dim]")
-    console.print(f"[dim]HTML report: {html_path}[/dim]")
+def _save_stats_json(
+    all_run_scores: list[list[Score]],
+    stats: list,
+    output_path: Path,
+) -> None:
+    """Save multi-run statistical results to JSON."""
+    import json
+
+    from coderace.stats import AgentStats
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    per_run = []
+    for run_idx, run_scores in enumerate(all_run_scores, 1):
+        per_run.append(
+            {
+                "run": run_idx,
+                "agents": [
+                    {
+                        "agent": s.agent,
+                        "composite_score": s.composite,
+                        "breakdown": {
+                            "tests_pass": s.breakdown.tests_pass,
+                            "exit_clean": s.breakdown.exit_clean,
+                            "lint_clean": s.breakdown.lint_clean,
+                            "wall_time": s.breakdown.wall_time,
+                            "lines_changed": s.breakdown.lines_changed,
+                        },
+                    }
+                    for s in run_scores
+                ],
+            }
+        )
+
+    aggregated = []
+    for s in stats:
+        assert isinstance(s, AgentStats)
+        aggregated.append(
+            {
+                "rank": stats.index(s) + 1,
+                "agent": s.agent,
+                "runs": s.runs,
+                "score_mean": s.score_mean,
+                "score_stddev": s.score_stddev,
+                "time_mean": s.time_mean,
+                "time_stddev": s.time_stddev,
+                "lines_mean": s.lines_mean,
+                "lines_stddev": s.lines_stddev,
+                "tests_pass_rate": s.tests_pass_rate,
+                "exit_clean_rate": s.exit_clean_rate,
+                "lint_clean_rate": s.lint_clean_rate,
+                "per_run_scores": s.per_run_scores,
+            }
+        )
+
+    data = {"type": "statistical", "per_run": per_run, "aggregated": aggregated}
+    output_path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 @app.command()
