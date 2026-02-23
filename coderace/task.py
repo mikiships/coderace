@@ -31,6 +31,10 @@ def load_task(path: str | Path) -> Task:
     if not repo.is_absolute():
         repo = path.parent / repo
 
+    scoring_raw = data.get("scoring")
+    if scoring_raw is not None and not isinstance(scoring_raw, dict):
+        raise ValueError(f"scoring must be a mapping, got {type(scoring_raw).__name__}")
+
     task = Task(
         name=data["name"],
         description=data["description"],
@@ -39,6 +43,7 @@ def load_task(path: str | Path) -> Task:
         agents=data["agents"],
         lint_command=data.get("lint_command"),
         timeout=data.get("timeout", 300),
+        scoring=scoring_raw,
     )
 
     errors = task.validate()
@@ -65,6 +70,14 @@ agents:
   - claude
   - codex
   - aider
+  - opencode
+# Optional: customize scoring weights (defaults shown, will be normalized)
+# scoring:
+#   tests: 40
+#   exit: 20
+#   lint: 15
+#   time: 15
+#   lines: 10
 """
     path.write_text(template)
     return path

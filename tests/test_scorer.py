@@ -2,12 +2,46 @@
 
 from __future__ import annotations
 
-from coderace.scorer import WEIGHTS, _normalize_lower_better
+import pytest
+
+from coderace.scorer import _normalize_lower_better
+from coderace.types import DEFAULT_WEIGHTS, normalize_weights
 
 
 def test_weights_sum_to_one() -> None:
-    total = sum(WEIGHTS.values())
+    total = sum(DEFAULT_WEIGHTS.values())
     assert abs(total - 1.0) < 1e-9
+
+
+# --- Custom scoring weights tests ---
+
+
+def test_normalize_weights_aliases() -> None:
+    result = normalize_weights({"tests": 50, "exit": 20, "lint": 10, "time": 10, "lines": 10})
+    assert abs(result["tests_pass"] - 0.5) < 1e-9
+    assert abs(sum(result.values()) - 1.0) < 1e-9
+
+
+def test_normalize_weights_partial() -> None:
+    """Missing keys default to 0."""
+    result = normalize_weights({"tests": 100})
+    assert result["tests_pass"] == 1.0
+    assert result["exit_clean"] == 0.0
+
+
+def test_normalize_weights_unknown_key() -> None:
+    with pytest.raises(ValueError, match="Unknown scoring key"):
+        normalize_weights({"bogus": 50})
+
+
+def test_normalize_weights_negative() -> None:
+    with pytest.raises(ValueError, match="must be >= 0"):
+        normalize_weights({"tests": -10})
+
+
+def test_normalize_weights_all_zero() -> None:
+    with pytest.raises(ValueError, match="must not all be zero"):
+        normalize_weights({"tests": 0, "exit": 0, "lint": 0, "time": 0, "lines": 0})
 
 
 def test_normalize_single_value() -> None:

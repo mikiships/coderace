@@ -5,16 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from coderace.types import AgentResult, Score, ScoreBreakdown
-
-# Weights must sum to 1.0
-WEIGHTS = {
-    "tests_pass": 0.40,
-    "exit_clean": 0.20,
-    "lint_clean": 0.15,
-    "wall_time": 0.15,
-    "lines_changed": 0.10,
-}
+from coderace.types import DEFAULT_WEIGHTS, AgentResult, Score, ScoreBreakdown
 
 
 def run_command(cmd: str, cwd: Path, timeout: int = 120) -> tuple[int, str]:
@@ -44,6 +35,7 @@ def compute_score(
     diff_lines: int,
     all_wall_times: list[float],
     all_diff_lines: list[int],
+    weights: dict[str, float] | None = None,
 ) -> Score:
     """Compute a composite score for an agent result."""
     breakdown = ScoreBreakdown()
@@ -67,21 +59,24 @@ def compute_score(
     breakdown.wall_time = result.wall_time
     breakdown.lines_changed = diff_lines
 
+    # Use custom weights or defaults
+    w = weights if weights is not None else DEFAULT_WEIGHTS
+
     # Compute composite
     composite = 0.0
 
     # Boolean metrics
-    composite += WEIGHTS["tests_pass"] * (100.0 if breakdown.tests_pass else 0.0)
-    composite += WEIGHTS["exit_clean"] * (100.0 if breakdown.exit_clean else 0.0)
-    composite += WEIGHTS["lint_clean"] * (100.0 if breakdown.lint_clean else 0.0)
+    composite += w["tests_pass"] * (100.0 if breakdown.tests_pass else 0.0)
+    composite += w["exit_clean"] * (100.0 if breakdown.exit_clean else 0.0)
+    composite += w["lint_clean"] * (100.0 if breakdown.lint_clean else 0.0)
 
     # Wall time: normalize (lower is better)
-    composite += WEIGHTS["wall_time"] * _normalize_lower_better(
+    composite += w["wall_time"] * _normalize_lower_better(
         result.wall_time, all_wall_times
     )
 
     # Lines changed: normalize (fewer is better)
-    composite += WEIGHTS["lines_changed"] * _normalize_lower_better(
+    composite += w["lines_changed"] * _normalize_lower_better(
         float(diff_lines), [float(x) for x in all_diff_lines]
     )
 

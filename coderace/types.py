@@ -5,6 +5,51 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+DEFAULT_WEIGHTS: dict[str, float] = {
+    "tests_pass": 0.40,
+    "exit_clean": 0.20,
+    "lint_clean": 0.15,
+    "wall_time": 0.15,
+    "lines_changed": 0.10,
+}
+
+VALID_WEIGHT_KEYS = frozenset(DEFAULT_WEIGHTS.keys())
+
+# Aliases for YAML convenience (short name -> canonical name)
+WEIGHT_ALIASES: dict[str, str] = {
+    "tests": "tests_pass",
+    "exit": "exit_clean",
+    "lint": "lint_clean",
+    "time": "wall_time",
+    "lines": "lines_changed",
+}
+
+
+def normalize_weights(raw: dict[str, float]) -> dict[str, float]:
+    """Normalize scoring weights: resolve aliases, validate keys, scale to sum=1.0."""
+    resolved: dict[str, float] = {}
+    for key, value in raw.items():
+        canonical = WEIGHT_ALIASES.get(key, key)
+        if canonical not in VALID_WEIGHT_KEYS:
+            raise ValueError(
+                f"Unknown scoring key: {key!r} "
+                f"(valid: {', '.join(sorted(VALID_WEIGHT_KEYS | set(WEIGHT_ALIASES.keys())))})"
+            )
+        if value < 0:
+            raise ValueError(f"Scoring weight for {key!r} must be >= 0, got {value}")
+        resolved[canonical] = value
+
+    # Fill missing keys with 0
+    for key in VALID_WEIGHT_KEYS:
+        resolved.setdefault(key, 0.0)
+
+    total = sum(resolved.values())
+    if total == 0:
+        raise ValueError("Scoring weights must not all be zero")
+
+    # Normalize to sum=1.0
+    return {k: v / total for k, v in resolved.items()}
+
 
 @dataclass
 class Task:
@@ -17,6 +62,7 @@ class Task:
     agents: list[str]
     lint_command: str | None = None
     timeout: int = 300
+    scoring: dict[str, float] | None = None
 
     def validate(self) -> list[str]:
         """Return list of validation errors, empty if valid."""
@@ -29,13 +75,24 @@ class Task:
             errors.append("test_command is required")
         if not self.agents:
             errors.append("At least one agent is required")
-        known = {"claude", "codex", "aider", "gemini"}
+        known = {"claude", "codex", "aider", "gemini", "opencode"}
         for agent in self.agents:
             if agent not in known:
                 errors.append(f"Unknown agent: {agent!r} (known: {', '.join(sorted(known))})")
         if self.timeout < 1:
             errors.append("timeout must be positive")
+        if self.scoring is not None:
+            try:
+                normalize_weights(self.scoring)
+            except ValueError as e:
+                errors.append(str(e))
         return errors
+
+    def get_weights(self) -> dict[str, float]:
+        """Return normalized scoring weights (custom or defaults)."""
+        if self.scoring is not None:
+            return normalize_weights(self.scoring)
+        return dict(DEFAULT_WEIGHTS)
 
 
 @dataclass

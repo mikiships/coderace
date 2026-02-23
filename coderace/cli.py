@@ -231,6 +231,7 @@ def run(
             diff_lines=diff_lines_map.get(result.agent, 0),
             all_wall_times=all_wall_times,
             all_diff_lines=all_diff_lines,
+            weights=task.get_weights(),
         )
         scores.append(score)
 
