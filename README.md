@@ -241,6 +241,77 @@ Keys can be agent names (`claude`, `codex`, `aider`, `gemini`, `opencode`) or mo
 
 Pricing is easy to update: the table lives in `coderace/cost.py` as a plain dict.
 
+## Leaderboard & History
+
+Every `coderace run` automatically saves results to a local SQLite database (`~/.coderace/results.db`). Two new commands aggregate this data.
+
+### Leaderboard
+
+```bash
+# Show all-time rankings across all tasks
+coderace leaderboard
+
+# Filter by task
+coderace leaderboard --task fix-auth-bug
+
+# Only agents with 5+ races
+coderace leaderboard --min-runs 5
+
+# Filter by time
+coderace leaderboard --since 7d
+coderace leaderboard --since 2026-01-01
+
+# Output formats
+coderace leaderboard --format json
+coderace leaderboard --format markdown
+```
+
+Example output:
+
+```
+┌──────┬────────┬──────┬───────┬──────┬───────────┬──────────┬──────────┐
+│ Rank │ Agent  │ Wins │ Races │ Win% │ Avg Score │ Avg Cost │ Avg Time │
+├──────┼────────┼──────┼───────┼──────┼───────────┼──────────┼──────────┤
+│  1   │ claude │    5 │     8 │  63% │      82.3 │  $0.0055 │     10.2 │
+│  2   │ codex  │    2 │     8 │  25% │      71.1 │  $0.0038 │     14.5 │
+│  3   │ aider  │    1 │     6 │  17% │      65.4 │        - │     11.8 │
+└──────┴────────┴──────┴───────┴──────┴───────────┴──────────┴──────────┘
+```
+
+### History
+
+```bash
+# Show recent runs
+coderace history
+
+# Filter by task or agent
+coderace history --task fix-auth-bug
+coderace history --agent claude
+
+# Limit results
+coderace history --limit 10
+
+# Output as JSON or markdown
+coderace history --format json
+```
+
+Example output:
+
+```
+┌────────┬─────────────────────┬──────────────┬────────────────┬────────┬────────────┐
+│ Run ID │ Date                │ Task         │ Agents         │ Winner │ Best Score │
+├────────┼─────────────────────┼──────────────┼────────────────┼────────┼────────────┤
+│      3 │ 2026-02-24 14:32:10 │ fix-auth-bug │ claude, codex  │ claude │       90.0 │
+│      2 │ 2026-02-24 14:30:05 │ add-types    │ claude, codex  │ codex  │       80.0 │
+│      1 │ 2026-02-24 14:28:00 │ fix-auth-bug │ claude, aider  │ claude │       85.0 │
+└────────┴─────────────────────┴──────────────┴────────────────┴────────┴────────────┘
+```
+
+### Configuration
+
+- **Database location:** `~/.coderace/results.db` by default. Override with `CODERACE_DB` env var.
+- **Skip saving:** `coderace run task.yaml --no-save` to run without persisting results.
+
 ## Supported Agents
 
 | Agent | CLI | Notes |

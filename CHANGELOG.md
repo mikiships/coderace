@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0] - 2026-02-24
+
+### Added
+
+- **Persistent result storage** — Every `coderace run` now automatically saves results to a local SQLite database at `~/.coderace/results.db`. Configurable via `CODERACE_DB` env var.
+- **`coderace leaderboard`** — New command showing aggregate rankings across all runs. Columns: Agent, Wins, Races, Win%, Avg Score, Avg Cost, Avg Time. Supports `--task`, `--since`, `--min-runs` filters and `--format terminal|markdown|json|html` output.
+- **`coderace history`** — New command showing past runs (newest first). Columns: Run ID, Date, Task, Agents, Winner, Best Score. Supports `--task`, `--agent`, `--limit` filters and `--format terminal|markdown|json` output.
+- **`--no-save` flag** — `coderace run task.yaml --no-save` skips persisting results to the database.
+- **`coderace/store.py`** — `ResultStore` class with `save_run()`, `get_runs()`, `get_agent_stats()`. Auto-creates DB and tables on first use. WAL mode, proper indexes, concurrent write support.
+- **Integration test** — Full workflow test: run -> save -> leaderboard -> history.
+
 ## [0.4.0] - 2026-02-24
 
 ### Added
