@@ -716,6 +716,64 @@ def leaderboard(
 
 
 @app.command()
+def history(
+    task: str | None = typer.Option(
+        None, "--task", help="Filter by task name"
+    ),
+    agent: str | None = typer.Option(
+        None, "--agent", help="Show only runs including this agent"
+    ),
+    limit: int = typer.Option(
+        20, "--limit", "-n", help="Maximum number of runs to show"
+    ),
+    fmt: str | None = typer.Option(
+        None,
+        "--format",
+        "-F",
+        help="Output format: terminal (default) | markdown | json",
+    ),
+) -> None:
+    """Show past race runs (newest first)."""
+    from coderace.commands.history import (
+        format_history_json,
+        format_history_markdown,
+        format_history_terminal,
+    )
+    from coderace.store import ResultStore
+
+    try:
+        store = ResultStore()
+    except Exception as exc:
+        console.print(f"[red]Cannot open result store: {exc}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        runs = store.get_runs(task_name=task, agent=agent, limit=limit)
+    finally:
+        store.close()
+
+    if not runs:
+        console.print("[yellow]No runs recorded yet.[/yellow]")
+        return
+
+    if fmt == "markdown":
+        import sys
+
+        sys.stdout.write(format_history_markdown(runs))
+    elif fmt == "json":
+        import sys
+
+        sys.stdout.write(format_history_json(runs))
+    elif fmt is not None and fmt != "terminal":
+        console.print(
+            f"[red]Unknown --format {fmt!r}. Choose: terminal, markdown, json[/red]"
+        )
+        raise typer.Exit(1)
+    else:
+        format_history_terminal(runs, console)
+
+
+@app.command()
 def version() -> None:
     """Show coderace version."""
     console.print(f"coderace {__version__}")
