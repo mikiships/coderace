@@ -1,0 +1,33 @@
+name: add-retry-logic
+description: |
+  The ResultStore class in coderace/store.py currently has no retry logic
+  for database operations. SQLite can throw "database is locked" errors
+  under concurrent access.
+
+  Add retry logic to the save_run() method in coderace/store.py:
+  1. Wrap the INSERT operations in a retry loop (max 3 attempts)
+  2. Use exponential backoff (0.1s, 0.2s, 0.4s)
+  3. Only retry on sqlite3.OperationalError
+  4. Log retry attempts to stderr
+  5. Re-raise after max retries exhausted
+
+  Also add tests in tests/test_store_retry.py:
+  - Test that save_run succeeds on first attempt (no retry needed)
+  - Test that retry logic is exercised when OperationalError occurs
+  - Test that max retries raises the original exception
+
+  Do NOT modify any other files. Only touch coderace/store.py and tests/test_store_retry.py.
+
+repo: .
+test_command: uv run pytest tests/test_store_retry.py tests/test_store.py -x -q
+lint_command: uv run ruff check coderace/store.py
+timeout: 300
+agents:
+  - claude
+  - gemini
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5
