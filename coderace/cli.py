@@ -121,6 +121,9 @@ def run(
     no_cost: bool = typer.Option(
         False, "--no-cost", help="Disable cost tracking"
     ),
+    no_save: bool = typer.Option(
+        False, "--no-save", help="Skip saving results to the local database"
+    ),
 ) -> None:
     """Run all agents on a task and score the results."""
     task = load_task(task_file)
@@ -374,6 +377,43 @@ def run(
         console.print(
             f"\n[dim]Stats results saved to {json_path}[/dim]"
         )
+
+    # Auto-save to result store
+    if not no_save and all_run_scores:
+        _auto_save_to_store(task.name, all_run_scores, base_ref)
+
+
+def _auto_save_to_store(
+    task_name: str,
+    all_run_scores: list[list[Score]],
+    git_ref: str | None = None,
+) -> None:
+    """Save run results to the persistent result store (graceful fallback)."""
+    try:
+        from coderace.store import ResultStore
+
+        store = ResultStore()
+        for scores in all_run_scores:
+            results = []
+            for score in sorted(scores, key=lambda s: s.composite, reverse=True):
+                r: dict = {
+                    "agent": score.agent,
+                    "composite_score": score.composite,
+                    "wall_time": score.breakdown.wall_time,
+                    "lines_changed": score.breakdown.lines_changed,
+                    "tests_pass": score.breakdown.tests_pass,
+                    "exit_clean": score.breakdown.exit_clean,
+                    "lint_clean": score.breakdown.lint_clean,
+                }
+                if score.cost_result is not None:
+                    r["cost_usd"] = score.cost_result.estimated_cost_usd
+                    r["model_name"] = score.cost_result.model_name
+                results.append(r)
+            store.save_run(task_name, results, git_ref=git_ref)
+        store.close()
+    except Exception:
+        # Graceful fallback: don't fail the run if store is unavailable
+        pass
 
 
 def _save_stats_json(
