@@ -1,6 +1,10 @@
 name: 'coderace'
-description: 'Race coding agents on a task and post results as a PR comment'
-author: 'coderace'
+description: 'Race coding agents (Claude Code, Codex, Aider, Gemini, OpenCode) on real tasks. Get scored comparisons with cost tracking, posted as PR comments.'
+author: 'mikiships'
+
+branding:
+  icon: 'zap'
+  color: 'orange'
 
 inputs:
   task:
