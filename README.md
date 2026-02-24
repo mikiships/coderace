@@ -170,6 +170,10 @@ Sequential mode (default) runs agents one at a time on the same repo.
 
 The goal isn't "which model is best." It's "which agent solves my specific problem best."
 
+## See Also
+
+- **[pytest-agentcontract](https://github.com/mikiships/pytest-agentcontract)** -- Deterministic CI tests for LLM agent trajectories. Record once, replay offline, assert contracts. Pairs well with coderace: race agents to find the best one, then lock down its behavior with contract tests.
+
 ## Requirements
 
 - Python 3.10+
