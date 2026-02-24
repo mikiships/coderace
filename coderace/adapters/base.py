@@ -6,7 +6,9 @@ import subprocess
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
+from coderace.cost import CostResult
 from coderace.types import AgentResult
 
 
@@ -19,6 +21,19 @@ class BaseAdapter(ABC):
     def build_command(self, task_description: str) -> list[str]:
         """Build the CLI command to invoke this agent."""
         ...
+
+    def parse_cost(
+        self,
+        stdout: str,
+        stderr: str,
+        model_name: str = "",
+        custom_pricing: dict[str, tuple[float, float]] | None = None,
+    ) -> Optional[CostResult]:
+        """Parse cost data from agent output. Override in subclasses.
+
+        Returns None if cost data is unavailable.
+        """
+        return None
 
     def run(self, task_description: str, workdir: Path, timeout: int) -> AgentResult:
         """Run the agent on a task and capture results."""
@@ -50,6 +65,13 @@ class BaseAdapter(ABC):
 
         wall_time = time.monotonic() - start
 
+        # Parse cost (fails gracefully — never raises)
+        cost_result: Optional[CostResult] = None
+        try:
+            cost_result = self.parse_cost(stdout, stderr)
+        except Exception:
+            pass
+
         return AgentResult(
             agent=self.name,
             exit_code=exit_code,
@@ -57,4 +79,5 @@ class BaseAdapter(ABC):
             stderr=stderr,
             wall_time=wall_time,
             timed_out=timed_out,
+            cost_result=cost_result,
         )

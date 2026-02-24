@@ -86,6 +86,7 @@ def compute_score(
         breakdown=breakdown,
         tests_output=test_output,
         lint_output=lint_output,
+        cost_result=result.cost_result,
     )
 
 

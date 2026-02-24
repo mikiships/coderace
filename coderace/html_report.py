@@ -22,6 +22,17 @@ def generate_html_report(
     rows = ""
     for i, score in enumerate(ranked, 1):
         b = score.breakdown
+        cr = score.cost_result
+        if cr is not None:
+            cost_str = f"${cr.estimated_cost_usd:.4f}"
+            if score.composite > 0:
+                cost_per_pt = cr.estimated_cost_usd / score.composite
+                cost_per_pt_str = f"${cost_per_pt:.5f}/pt"
+            else:
+                cost_per_pt_str = "N/A"
+        else:
+            cost_str = "-"
+            cost_per_pt_str = "-"
         rows += f"""        <tr>
           <td class="rank">{i}</td>
           <td class="agent">{html.escape(score.agent)}</td>
@@ -31,6 +42,8 @@ def generate_html_report(
           <td class="{'pass' if b.lint_clean else 'fail'}">{"PASS" if b.lint_clean else "FAIL"}</td>
           <td class="num">{b.wall_time:.1f}</td>
           <td class="num">{b.lines_changed}</td>
+          <td class="num">{cost_str}</td>
+          <td class="num">{cost_per_pt_str}</td>
         </tr>
 """
 
@@ -87,6 +100,8 @@ def generate_html_report(
         <th data-type="str">Lint</th>
         <th data-type="num">Time (s)</th>
         <th data-type="num">Lines</th>
+        <th data-type="num">Cost (USD)</th>
+        <th data-type="num">$/score</th>
       </tr>
     </thead>
     <tbody>

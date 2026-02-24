@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
+from coderace.cost import CostResult
 
 DEFAULT_WEIGHTS: dict[str, float] = {
     "tests_pass": 0.40,
@@ -105,6 +108,7 @@ class AgentResult:
     stderr: str
     wall_time: float
     timed_out: bool = False
+    cost_result: Optional[CostResult] = None
 
 
 @dataclass
@@ -128,3 +132,4 @@ class Score:
     tests_output: str = ""
     lint_output: str = ""
     diff_stat: str = ""
+    cost_result: Optional[CostResult] = None

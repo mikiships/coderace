@@ -27,9 +27,15 @@ def print_results(scores: list[Score], console: Console | None = None) -> str:
     table.add_column("Lint", justify="center")
     table.add_column("Time (s)", justify="right")
     table.add_column("Lines", justify="right")
+    table.add_column("Cost (USD)", justify="right")
 
     for i, score in enumerate(ranked, 1):
         b = score.breakdown
+        cost_str = (
+            f"${score.cost_result.estimated_cost_usd:.4f}"
+            if score.cost_result is not None
+            else "-"
+        )
         table.add_row(
             str(i),
             score.agent,
@@ -39,6 +45,7 @@ def print_results(scores: list[Score], console: Console | None = None) -> str:
             _bool_icon(b.lint_clean),
             f"{b.wall_time:.1f}",
             str(b.lines_changed),
+            cost_str,
         )
 
     console.print(table)
@@ -67,6 +74,17 @@ def save_results_json(scores: list[Score], output_path: Path) -> None:
                     "wall_time": round(score.breakdown.wall_time, 2),
                     "lines_changed": score.breakdown.lines_changed,
                 },
+                "cost": (
+                    {
+                        "input_tokens": score.cost_result.input_tokens,
+                        "output_tokens": score.cost_result.output_tokens,
+                        "estimated_cost_usd": round(score.cost_result.estimated_cost_usd, 6),
+                        "model_name": score.cost_result.model_name,
+                        "pricing_source": score.cost_result.pricing_source,
+                    }
+                    if score.cost_result is not None
+                    else None
+                ),
                 "tests_output": score.tests_output,
                 "lint_output": score.lint_output,
                 "diff_stat": score.diff_stat,
@@ -108,6 +126,7 @@ def print_stats_results(
     table.add_column("Lint %", justify="center")
     table.add_column("Time (s)", justify="right")
     table.add_column("Lines", justify="right")
+    table.add_column("Cost (USD)", justify="right")
 
     for i, s in enumerate(stats, 1):
         assert isinstance(s, AgentStats)
@@ -126,6 +145,12 @@ def print_stats_results(
             if s.lines_stddev == 0
             else f"{s.lines_mean:.0f} \u00b1{s.lines_stddev:.0f}"
         )
+        if s.cost_mean == 0.0:
+            cost_str = "-"
+        elif s.cost_stddev == 0.0:
+            cost_str = f"${s.cost_mean:.4f}"
+        else:
+            cost_str = f"${s.cost_mean:.4f} \u00b1{s.cost_stddev:.4f}"
         table.add_row(
             str(i),
             s.agent,
@@ -136,6 +161,7 @@ def print_stats_results(
             f"{s.lint_clean_rate * 100:.0f}%",
             time_str,
             lines_str,
+            cost_str,
         )
 
     console.print(table)

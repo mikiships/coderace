@@ -39,16 +39,21 @@ def format_markdown_results(scores: list[Score], task_name: str = "") -> str:
     )
 
     # Table header
-    header = "| Rank | Agent | Score | Tests | Lint | Exit | Time (s) | Lines |\n"
-    separator = "|------|-------|------:|:-----:|:----:|:----:|---------:|------:|\n"
+    header = "| Rank | Agent | Score | Tests | Lint | Exit | Time (s) | Lines | Cost (USD) |\n"
+    separator = "|------|-------|------:|:-----:|:----:|:----:|---------:|------:|-----------:|\n"
 
     rows: list[str] = []
     for i, score in enumerate(ranked, 1):
         b = score.breakdown
+        cost_str = (
+            f"${score.cost_result.estimated_cost_usd:.4f}"
+            if score.cost_result is not None
+            else "-"
+        )
         row = (
             f"| {i} | `{score.agent}` | {score.composite:.1f} |"
             f" {_bool_md(b.tests_pass)} | {_bool_md(b.lint_clean)} |"
-            f" {_bool_md(b.exit_clean)} | {b.wall_time:.1f} | {b.lines_changed} |"
+            f" {_bool_md(b.exit_clean)} | {b.wall_time:.1f} | {b.lines_changed} | {cost_str} |"
         )
         rows.append(row)
 
@@ -84,12 +89,18 @@ def format_markdown_from_json(data: list[dict], task_name: str = "") -> str:
     heading = f"## coderace results: {task_name}\n\n" if task_name else "## coderace results\n\n"
     summary = f"**Winner:** `{agent}` — {score:.1f} pts | {n} agent(s) raced\n\n"
 
-    header = "| Rank | Agent | Score | Tests | Lint | Exit | Time (s) | Lines |\n"
-    separator = "|------|-------|------:|:-----:|:----:|:----:|---------:|------:|\n"
+    header = "| Rank | Agent | Score | Tests | Lint | Exit | Time (s) | Lines | Cost (USD) |\n"
+    separator = "|------|-------|------:|:-----:|:----:|:----:|---------:|------:|-----------:|\n"
 
     rows: list[str] = []
     for entry in data:
         b = entry.get("breakdown", {})
+        cost_info = entry.get("cost")
+        cost_str = (
+            f"${cost_info['estimated_cost_usd']:.4f}"
+            if cost_info is not None
+            else "-"
+        )
         rank = entry.get("rank", "?")
         a = entry.get("agent", "?")
         sc = entry.get("composite_score", 0.0)
@@ -98,7 +109,7 @@ def format_markdown_from_json(data: list[dict], task_name: str = "") -> str:
             f" {_bool_md(b.get('tests_pass', False))} |"
             f" {_bool_md(b.get('lint_clean', False))} |"
             f" {_bool_md(b.get('exit_clean', False))} |"
-            f" {b.get('wall_time', 0.0):.1f} | {b.get('lines_changed', 0)} |"
+            f" {b.get('wall_time', 0.0):.1f} | {b.get('lines_changed', 0)} | {cost_str} |"
         )
         rows.append(row)
 

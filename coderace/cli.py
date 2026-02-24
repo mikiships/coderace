@@ -417,6 +417,8 @@ def _save_stats_json(
                 "exit_clean_rate": s.exit_clean_rate,
                 "lint_clean_rate": s.lint_clean_rate,
                 "per_run_scores": s.per_run_scores,
+                "cost_mean": s.cost_mean,
+                "cost_stddev": s.cost_stddev,
             }
         )
 
@@ -484,9 +486,16 @@ def results(
     table.add_column("Lint", justify="center")
     table.add_column("Time (s)", justify="right")
     table.add_column("Lines", justify="right")
+    table.add_column("Cost (USD)", justify="right")
 
     for entry in data:
         b = entry["breakdown"]
+        cost_info = entry.get("cost")
+        cost_str = (
+            f"${cost_info['estimated_cost_usd']:.4f}"
+            if cost_info is not None
+            else "-"
+        )
         table.add_row(
             str(entry["rank"]),
             entry["agent"],
@@ -496,6 +505,7 @@ def results(
             _bool_icon(b["lint_clean"]),
             f"{b['wall_time']:.1f}",
             str(b["lines_changed"]),
+            cost_str,
         )
 
     console.print(table)

@@ -24,6 +24,8 @@ class AgentStats:
     exit_clean_rate: float
     lint_clean_rate: float
     per_run_scores: list[float]
+    cost_mean: float = 0.0      # mean estimated cost USD (0.0 when no data)
+    cost_stddev: float = 0.0    # stddev (0.0 when < 2 data points)
 
 
 def _mean(values: list[float]) -> float:
@@ -63,6 +65,11 @@ def aggregate_runs(
         composites = [s.composite for s in scores]
         times = [s.breakdown.wall_time for s in scores]
         lines = [float(s.breakdown.lines_changed) for s in scores]
+        costs = [
+            s.cost_result.estimated_cost_usd
+            for s in scores
+            if s.cost_result is not None
+        ]
 
         stats.append(
             AgentStats(
@@ -90,6 +97,8 @@ def aggregate_runs(
                     2,
                 ),
                 per_run_scores=composites,
+                cost_mean=round(_mean(costs), 6) if costs else 0.0,
+                cost_stddev=round(_stddev(costs), 6) if costs else 0.0,
             )
         )
 
