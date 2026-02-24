@@ -430,6 +430,12 @@ def results(
     html_output: Path | None = typer.Option(
         None, "--html", help="Export as HTML report"
     ),
+    fmt: str | None = typer.Option(
+        None,
+        "--format",
+        "-F",
+        help="Output format: terminal (default) | markdown | json",
+    ),
 ) -> None:
     """Show results from the last run."""
     task = load_task(task_file)
@@ -444,6 +450,29 @@ def results(
 
     data = load_results_json(json_path)
 
+    # -- markdown / json output (write to stdout, skip Rich table) --
+    if fmt == "markdown":
+        import sys
+
+        from coderace.commands.results import format_markdown_from_json
+
+        sys.stdout.write(format_markdown_from_json(data, task_name=task.name))
+        return
+
+    if fmt == "json":
+        import json as _json
+        import sys
+
+        sys.stdout.write(_json.dumps({"results": data}, indent=2) + "\n")
+        return
+
+    if fmt is not None and fmt not in ("terminal", "markdown", "json"):
+        console.print(
+            f"[red]Unknown --format {fmt!r}. Choose: terminal, markdown, json[/red]"
+        )
+        raise typer.Exit(1)
+
+    # -- default terminal Rich table --
     from rich.table import Table
 
     table = Table(title=f"coderace results: {task.name}", show_lines=True)
