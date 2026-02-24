@@ -649,6 +649,73 @@ def diff(
 
 
 @app.command()
+def leaderboard(
+    task: str | None = typer.Option(
+        None, "--task", help="Filter by task name"
+    ),
+    since: str | None = typer.Option(
+        None, "--since", help='Filter by time (ISO date or "7d", "30d")'
+    ),
+    min_runs: int = typer.Option(
+        0, "--min-runs", help="Exclude agents with fewer than N races"
+    ),
+    fmt: str | None = typer.Option(
+        None,
+        "--format",
+        "-F",
+        help="Output format: terminal (default) | markdown | json | html",
+    ),
+) -> None:
+    """Show aggregate leaderboard rankings across all runs."""
+    from coderace.commands.leaderboard import (
+        format_leaderboard_html,
+        format_leaderboard_json,
+        format_leaderboard_markdown,
+        format_leaderboard_terminal,
+    )
+    from coderace.store import ResultStore
+
+    try:
+        store = ResultStore()
+    except Exception as exc:
+        console.print(f"[red]Cannot open result store: {exc}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        stats = store.get_agent_stats(
+            task_name=task,
+            since=since,
+            min_runs=min_runs,
+        )
+    finally:
+        store.close()
+
+    if not stats:
+        console.print("[yellow]No data yet. Run some races first.[/yellow]")
+        return
+
+    if fmt == "markdown":
+        import sys
+
+        sys.stdout.write(format_leaderboard_markdown(stats))
+    elif fmt == "json":
+        import sys
+
+        sys.stdout.write(format_leaderboard_json(stats))
+    elif fmt == "html":
+        import sys
+
+        sys.stdout.write(format_leaderboard_html(stats))
+    elif fmt is not None and fmt != "terminal":
+        console.print(
+            f"[red]Unknown --format {fmt!r}. Choose: terminal, markdown, json, html[/red]"
+        )
+        raise typer.Exit(1)
+    else:
+        format_leaderboard_terminal(stats, console)
+
+
+@app.command()
 def version() -> None:
     """Show coderace version."""
     console.print(f"coderace {__version__}")
