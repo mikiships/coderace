@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] - 2026-02-24
+
+### Added
+
+- **`coderace diff`** - Generate task YAML from a git diff. Three modes: `review` (find bugs), `fix` (apply fixes), `improve` (refactor). Pipe any diff in, get a ready-to-race task out.
+- **GitHub Action** - `uses: mikiships/coderace@main` drops into any workflow. Races agents on your task and posts a results table as a PR comment. Re-runs update the same comment.
+- **Example CI workflows** - Two drop-in configs: PR trigger and label trigger (`race-agents`).
+- **`--format` flag for results** - `coderace results task.yaml -F markdown|json|terminal` for CI-friendly output.
+
 ## [0.2.0] - 2026-02-23
 
 ### Added
