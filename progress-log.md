@@ -1,93 +1,92 @@
-# Build Progress Log — CI Integration (v0.3.0)
+# Progress Log: Cost Tracking (v0.4.0)
+
+Date: 2026-02-24
+Contract: all-day-build-contract-cost-tracking.md
 
 ---
 
-## D1: `coderace diff` command ✅
-
-**Status:** Complete  
-**Commit:** `2117b20`
+## D1: Cost Estimation Engine ✅
 
 **What was built:**
-- `coderace/commands/__init__.py` — new commands sub-package
-- `coderace/commands/diff.py` — core logic:
-  - `parse_diff_summary()`: extracts file list, +/- line counts, binary files from unified diff
-  - `build_description()`: composes mode-prefixed human-readable task description
-  - `generate_task_yaml()`: produces valid coderace task YAML from a diff
-  - `read_diff()`: reads from `--file` or stdin
-- `coderace/cli.py` — registered `diff` subcommand with `--mode`, `--agents`, `--file`, `--output`, `--name`, `--test-command`, `--lint-command` flags
-- `tests/test_diff.py` — 22 tests covering all modes, stdin/file input, edge cases (empty diff, binary files, large diff truncation, unknown mode, CLI flags)
+- `coderace/cost.py` — pricing table (dict), `CostResult` dataclass, `calculate_cost()`, `get_pricing()`, `estimate_from_sizes()`, per-parser functions for all 5 adapters
+- Pricing table covers: claude-sonnet-4-6, claude-opus-4-6, gpt-5.3-codex, gemini-2.5-pro, gemini-3.1-pro, aider-default, opencode-default
+- Each adapter (`claude.py`, `codex.py`, `gemini.py`, `aider.py`, `opencode.py`) got a `parse_cost()` method delegating to the appropriate parser
+- Fallback: `estimate_from_sizes()` estimates from input/output byte counts when token data unavailable
+- `CostResult`: `input_tokens`, `output_tokens`, `estimated_cost_usd`, `model_name`, `pricing_source`
 
-**Tests:** 22 new (99 total pass)  
-**Lint:** ruff clean
+**Tests:** 45 new tests in `tests/test_cost.py` — all pass
+- Unit tests for pricing table, get_pricing, calculate_cost, CostResult validation
+- Per-parser tests: JSON usage, cost lines, token lines, edge cases (missing output, partial tokens, comma numbers)
+- All-adapters-return-None-on-empty-output test
+
+**Commit:** `fd0ad27` — D1: cost estimation engine
 
 ---
 
-## D2: GitHub Action ✅
-
-**Status:** Complete  
-**Commit:** `66f47c3`
+## D2: Results Integration ✅
 
 **What was built:**
-- `action.yml` — composite GitHub Action with inputs: task, agents, parallel, github-token, coderace-version, python-version; outputs: results-json, comment-id
-- `scripts/ci-run.sh` — bash entrypoint: installs coderace, runs task, emits `results-json` GitHub Actions output
-- `scripts/format-comment.py` — reads JSON results, produces markdown PR comment with: summary line, results table (emoji ✅/❌), collapsible raw JSON. Posts/updates PR comment via GitHub API using `<!-- coderace-results -->` marker to avoid spam on re-run.
-- `tests/test_format_comment.py` — 16 tests: table header/content, summary winner/loser, empty results, main() CLI, file output, invalid JSON graceful degradation
+- `coderace/types.py` — `AgentResult.cost_result: Optional[CostResult]` and `Score.cost_result: Optional[CostResult]`
+- `coderace/adapters/base.py` — default `parse_cost()` returning None; `run()` calls `self.parse_cost()` and stores result on `AgentResult`; fails gracefully (try/except)
+- `coderace/scorer.py` — propagates `cost_result` from `AgentResult` to `Score`
+- `coderace/reporter.py` — "Cost (USD)" column in terminal table; `save_results_json()` includes `cost` object (or `null`); stats table also has Cost column
+- `coderace/commands/results.py` — Cost column in both `format_markdown_results()` and `format_markdown_from_json()`
+- `coderace/html_report.py` — Cost (USD) column + $/score ratio column
+- `coderace/stats.py` — `AgentStats.cost_mean`, `AgentStats.cost_stddev`; `aggregate_runs()` collects cost values from runs
+- `coderace/cli.py` — terminal `results` table shows Cost column; `_save_stats_json` includes `cost_mean`/`cost_stddev`
 
-**Tests:** 16 new (115 total pass)  
-**Lint:** ruff clean
+**Tests:** 21 new tests in `tests/test_cost_integration.py` — all pass
+- AgentResult/Score field presence
+- Scorer propagation (with and without cost)
+- Terminal table shows cost / dash
+- JSON round-trip
+- Markdown output
+- HTML report
+- Stats aggregation
+
+**Commit:** `fa5c2b9` — D2: cost integration
 
 ---
 
-## D3: Example CI workflows + README ✅
-
-**Status:** Complete  
-**Commit:** `0a84ca3`
+## D3: Cost Configuration ✅
 
 **What was built:**
-- `examples/ci-race-on-pr.yml` — copy-ready GitHub Actions workflow with two trigger patterns:
-  1. `pull_request` on every PR targeting `main`
-  2. `pull_request` label `race-agents` (on-demand, cost-controlled)
-- `README.md` — added two new sections:
-  - **`coderace diff`**: usage examples, modes table, flags table
-  - **CI Integration**: both workflow patterns with code snippets, action inputs table, example PR comment output
+- `coderace/types.py` — `Task.pricing: dict[str, tuple[float, float]] | None = None`
+- `coderace/task.py` — parses `pricing:` section from YAML; validates structure (mapping, required fields, non-negative values); converts to `dict[str, (float, float)]`
+- `coderace/task.py` — `create_template()` includes commented `pricing:` example
+- `coderace/adapters/base.py` — `run()` accepts `no_cost: bool = False` and `custom_pricing: dict | None = None`; passes `custom_pricing` to `parse_cost()`; skips parsing when `no_cost=True`
+- `coderace/cli.py` — `run` command has `--no-cost` flag; `_run_agent_sequential` and `_run_agent_worktree` accept and pass `no_cost`/`custom_pricing`; both call sites updated to pass `task.pricing`
 
-**Tests:** 115 total pass (no new tests needed for docs/example files)  
-**Lint:** ruff clean
+**Tests:** 18 new tests in `tests/test_cost_config.py` — all pass
+- YAML parsing: valid, multiple agents, model-name key, zero prices
+- YAML error cases: invalid type, missing field, negative value
+- Custom pricing affects cost calculation
+- `--no-cost` disables parsing; cost enabled by default
+- init template has pricing comment (commented out)
+- CLI help includes `--no-cost`
+
+**Commit:** `7633359` — D3: cost configuration
 
 ---
 
-## D4: `--format markdown` for `coderace results` ✅
-
-**Status:** Complete  
-**Commit:** `7b870ae`
+## D4: Documentation ✅
 
 **What was built:**
-- `coderace/commands/results.py`:
-  - `format_markdown_results(scores, task_name)` — markdown table from `Score` objects
-  - `format_markdown_from_json(data, task_name)` — markdown table from JSON dicts (avoids re-constructing Score objects in CLI)
-  - Both include heading, winner summary, full table with ✅/❌ icons, sorted by score
-- `coderace/cli.py` — added `--format/-F` option to `results` command:
-  - `markdown`: outputs markdown table to stdout (no Rich markup)
-  - `json`: outputs raw results JSON to stdout
-  - `terminal` (default): existing Rich table (unchanged)
-  - Unknown format: exits non-zero with helpful error
-- `tests/test_markdown_results.py` — 15 tests: heading, winner, all-agents, sorted order, empty list, pass/fail icons, CLI format paths, unknown format exit
+- `README.md` — "Cost Tracking" section: example terminal table, per-adapter source table, `--no-cost` usage
+- `README.md` — "Custom Pricing" section: YAML config example, default pricing table
+- `CHANGELOG.md` — v0.4.0 entry listing all new features
+- `examples/example-task.yaml`, `add-type-hints.yaml`, `fix-edge-case.yaml`, `write-tests.yaml` — all updated with commented `pricing:` section
 
-**Tests:** 15 new (130 total pass)  
-**Lint:** ruff clean
+**Commit:** `afc9c42` — D4: documentation
 
 ---
 
-## Summary
+## Final Status
 
-| Deliverable | Files | Tests added | Commit |
-|-------------|-------|-------------|--------|
-| D1: diff command | `coderace/commands/diff.py`, `cli.py` | 22 | `2117b20` |
-| D2: GitHub Action | `action.yml`, `scripts/ci-run.sh`, `scripts/format-comment.py` | 16 | `66f47c3` |
-| D3: Examples + README | `examples/ci-race-on-pr.yml`, `README.md` | 0 | `0a84ca3` |
-| D4: markdown output | `coderace/commands/results.py`, `cli.py` | 15 | `7b870ae` |
-| **Total** | **8 new files, 2 modified** | **53 new tests** | |
-
-Final test count: **130 tests, 0 failures**. `ruff check .` clean throughout.
-
-DONE
+- All 4 deliverables complete ✅
+- All checklist items checked ✅
+- Test count: 130 (pre-existing) → 214 (final) = 84 new tests added
+- All 214 tests pass ✅
+- Version left at 0.3.0 (no PyPI publish) ✅
+- No scope creep, no refactoring outside deliverables ✅
+- Committed after each deliverable ✅
