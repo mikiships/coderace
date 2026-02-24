@@ -1,92 +1,96 @@
-# Progress Log: Cost Tracking (v0.4.0)
+# Progress Log: Leaderboard & Result History (v0.5.0)
 
 Date: 2026-02-24
-Contract: all-day-build-contract-cost-tracking.md
+Contract: all-day-build-contract-leaderboard.md
 
 ---
 
-## D1: Cost Estimation Engine ✅
+## D1: Result Store ✅
 
 **What was built:**
-- `coderace/cost.py` — pricing table (dict), `CostResult` dataclass, `calculate_cost()`, `get_pricing()`, `estimate_from_sizes()`, per-parser functions for all 5 adapters
-- Pricing table covers: claude-sonnet-4-6, claude-opus-4-6, gpt-5.3-codex, gemini-2.5-pro, gemini-3.1-pro, aider-default, opencode-default
-- Each adapter (`claude.py`, `codex.py`, `gemini.py`, `aider.py`, `opencode.py`) got a `parse_cost()` method delegating to the appropriate parser
-- Fallback: `estimate_from_sizes()` estimates from input/output byte counts when token data unavailable
-- `CostResult`: `input_tokens`, `output_tokens`, `estimated_cost_usd`, `model_name`, `pricing_source`
+- `coderace/store.py` — `ResultStore` class with SQLite backend at `~/.coderace/results.db`
+- Schema: `runs` table (task_name, timestamp, git_ref, config_hash, agent_count) + `agent_results` table (score, time, cost, lines, pass/fail, model, winner flag)
+- Methods: `save_run()`, `get_runs()`, `get_agent_stats()`
+- Auto-create DB and tables on first use (no init step)
+- WAL mode, proper indexes, foreign keys, concurrent write support
+- Configurable via `CODERACE_DB` env var
 
-**Tests:** 45 new tests in `tests/test_cost.py` — all pass
-- Unit tests for pricing table, get_pricing, calculate_cost, CostResult validation
-- Per-parser tests: JSON usage, cost lines, token lines, edge cases (missing output, partial tokens, comma numbers)
-- All-adapters-return-None-on-empty-output test
+**Tests:** 25 new tests in `tests/test_store.py` — all pass
+- Save/query/filter, empty DB, concurrent writes, field round-trip, env var
 
-**Commit:** `fd0ad27` — D1: cost estimation engine
+**Commit:** `13b5cf4` — D1: result store
 
 ---
 
-## D2: Results Integration ✅
+## D2: Auto-Save on Run ✅
 
 **What was built:**
-- `coderace/types.py` — `AgentResult.cost_result: Optional[CostResult]` and `Score.cost_result: Optional[CostResult]`
-- `coderace/adapters/base.py` — default `parse_cost()` returning None; `run()` calls `self.parse_cost()` and stores result on `AgentResult`; fails gracefully (try/except)
-- `coderace/scorer.py` — propagates `cost_result` from `AgentResult` to `Score`
-- `coderace/reporter.py` — "Cost (USD)" column in terminal table; `save_results_json()` includes `cost` object (or `null`); stats table also has Cost column
-- `coderace/commands/results.py` — Cost column in both `format_markdown_results()` and `format_markdown_from_json()`
-- `coderace/html_report.py` — Cost (USD) column + $/score ratio column
-- `coderace/stats.py` — `AgentStats.cost_mean`, `AgentStats.cost_stddev`; `aggregate_runs()` collects cost values from runs
-- `coderace/cli.py` — terminal `results` table shows Cost column; `_save_stats_json` includes `cost_mean`/`cost_stddev`
+- `coderace/cli.py` — `_auto_save_to_store()` helper called after scoring
+- `--no-save` flag to disable persistence
+- Graceful fallback: DB errors don't crash the run (try/except with pass)
+- Scores mapped to store format including cost and model data
 
-**Tests:** 21 new tests in `tests/test_cost_integration.py` — all pass
-- AgentResult/Score field presence
-- Scorer propagation (with and without cost)
-- Terminal table shows cost / dash
-- JSON round-trip
-- Markdown output
-- HTML report
-- Stats aggregation
+**Tests:** 8 new tests in `tests/test_cli_store_integration.py` — all pass
+- Normal save, multi-run, cost propagation, graceful error, field mapping, winner detection
 
-**Commit:** `fa5c2b9` — D2: cost integration
+**Commit:** `37d4f65` — D2: auto-save on run
 
 ---
 
-## D3: Cost Configuration ✅
+## D3: `coderace leaderboard` Command ✅
 
 **What was built:**
-- `coderace/types.py` — `Task.pricing: dict[str, tuple[float, float]] | None = None`
-- `coderace/task.py` — parses `pricing:` section from YAML; validates structure (mapping, required fields, non-negative values); converts to `dict[str, (float, float)]`
-- `coderace/task.py` — `create_template()` includes commented `pricing:` example
-- `coderace/adapters/base.py` — `run()` accepts `no_cost: bool = False` and `custom_pricing: dict | None = None`; passes `custom_pricing` to `parse_cost()`; skips parsing when `no_cost=True`
-- `coderace/cli.py` — `run` command has `--no-cost` flag; `_run_agent_sequential` and `_run_agent_worktree` accept and pass `no_cost`/`custom_pricing`; both call sites updated to pass `task.pricing`
+- `coderace/commands/leaderboard.py` — formatting functions (terminal, markdown, json, html)
+- `coderace/cli.py` — `leaderboard` command with `--task`, `--since`, `--min-runs`, `--format` options
+- Columns: Agent | Wins | Races | Win% | Avg Score | Avg Cost | Avg Time
+- Ranking by win rate (descending), then avg score
 
-**Tests:** 18 new tests in `tests/test_cost_config.py` — all pass
-- YAML parsing: valid, multiple agents, model-name key, zero prices
-- YAML error cases: invalid type, missing field, negative value
-- Custom pricing affects cost calculation
-- `--no-cost` disables parsing; cost enabled by default
-- init template has pricing comment (commented out)
-- CLI help includes `--no-cost`
+**Tests:** 19 new tests in `tests/test_leaderboard.py` — all pass
+- Empty DB, format functions (terminal/markdown/json/html), CLI filters, ranking logic, help text
 
-**Commit:** `7633359` — D3: cost configuration
+**Commit:** `3745037` — D3: coderace leaderboard command
 
 ---
 
-## D4: Documentation ✅
+## D4: `coderace history` Command ✅
 
 **What was built:**
-- `README.md` — "Cost Tracking" section: example terminal table, per-adapter source table, `--no-cost` usage
-- `README.md` — "Custom Pricing" section: YAML config example, default pricing table
-- `CHANGELOG.md` — v0.4.0 entry listing all new features
-- `examples/example-task.yaml`, `add-type-hints.yaml`, `fix-edge-case.yaml`, `write-tests.yaml` — all updated with commented `pricing:` section
+- `coderace/commands/history.py` — formatting functions (terminal, markdown, json)
+- `coderace/cli.py` — `history` command with `--task`, `--agent`, `--limit`, `--format` options
+- Columns: Run ID | Date | Task | Agents | Winner | Best Score
+- Newest first ordering
 
-**Commit:** `afc9c42` — D4: documentation
+**Tests:** 16 new tests in `tests/test_history.py` — all pass
+- Empty DB, format functions, CLI filters, JSON structure, ordering, help text
+
+**Commit:** `2095bcc` — D4: coderace history command
+
+---
+
+## D5: Documentation & README Update ✅
+
+**What was built:**
+- `README.md` — "Leaderboard & History" section with usage examples and example output tables
+- `CHANGELOG.md` — v0.5.0 entry listing all new features
+- Version bumped to 0.5.0 in `pyproject.toml` and `coderace/__init__.py`
+- `coderace leaderboard --help` and `coderace history --help` show clear usage
+
+**Tests:** 4 new integration tests in `tests/test_full_workflow.py` — all pass
+- Full workflow: save → leaderboard → history roundtrip
+- Corrupted DB graceful handling
+- Single-agent race
+- Auto-save → query roundtrip
+
+**Commit:** `b4b4ee8` — D5: documentation
 
 ---
 
 ## Final Status
 
-- All 4 deliverables complete ✅
+- All 5 deliverables complete ✅
 - All checklist items checked ✅
-- Test count: 130 (pre-existing) → 214 (final) = 84 new tests added
-- All 214 tests pass ✅
-- Version left at 0.3.0 (no PyPI publish) ✅
+- Test count: 214 (pre-existing) → 286 (final) = 72 new tests added (target was 40+) ✅
+- All 286 tests pass ✅
+- Version bumped to 0.5.0 ✅
 - No scope creep, no refactoring outside deliverables ✅
 - Committed after each deliverable ✅
