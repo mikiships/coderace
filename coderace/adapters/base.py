@@ -35,7 +35,14 @@ class BaseAdapter(ABC):
         """
         return None
 
-    def run(self, task_description: str, workdir: Path, timeout: int) -> AgentResult:
+    def run(
+        self,
+        task_description: str,
+        workdir: Path,
+        timeout: int,
+        no_cost: bool = False,
+        custom_pricing: dict[str, tuple[float, float]] | None = None,
+    ) -> AgentResult:
         """Run the agent on a task and capture results."""
         cmd = self.build_command(task_description)
         start = time.monotonic()
@@ -67,10 +74,11 @@ class BaseAdapter(ABC):
 
         # Parse cost (fails gracefully — never raises)
         cost_result: Optional[CostResult] = None
-        try:
-            cost_result = self.parse_cost(stdout, stderr)
-        except Exception:
-            pass
+        if not no_cost:
+            try:
+                cost_result = self.parse_cost(stdout, stderr, custom_pricing=custom_pricing)
+            except Exception:
+                pass
 
         return AgentResult(
             agent=self.name,

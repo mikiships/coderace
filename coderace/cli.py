@@ -51,6 +51,8 @@ def _run_agent_sequential(
     branch: str,
     base_ref: str,
     timeout: int,
+    no_cost: bool = False,
+    custom_pricing: dict | None = None,
 ) -> tuple[AgentResult | None, int]:
     """Run a single agent sequentially (on the main repo). Returns (result, lines_changed)."""
     try:
@@ -59,7 +61,7 @@ def _run_agent_sequential(
         return None, 0
 
     adapter = ADAPTERS[agent_name]()
-    result = adapter.run(task_description, repo, timeout)
+    result = adapter.run(task_description, repo, timeout, no_cost=no_cost, custom_pricing=custom_pricing)
 
     _, lines = get_diff_stat(repo, base_ref)
     return result, lines
@@ -72,6 +74,8 @@ def _run_agent_worktree(
     branch: str,
     base_ref: str,
     timeout: int,
+    no_cost: bool = False,
+    custom_pricing: dict | None = None,
 ) -> tuple[AgentResult | None, int]:
     """Run a single agent in a git worktree (for parallel execution)."""
     import tempfile
@@ -87,7 +91,7 @@ def _run_agent_worktree(
         add_worktree(repo, worktree_dir, branch)
 
         adapter = ADAPTERS[agent_name]()
-        result = adapter.run(task_description, worktree_dir, timeout)
+        result = adapter.run(task_description, worktree_dir, timeout, no_cost=no_cost, custom_pricing=custom_pricing)
 
         _, lines = get_diff_stat(worktree_dir, base_ref)
         return result, lines
@@ -113,6 +117,9 @@ def run(
     ),
     runs: int = typer.Option(
         1, "--runs", "-n", help="Number of runs (>1 for stats)"
+    ),
+    no_cost: bool = typer.Option(
+        False, "--no-cost", help="Disable cost tracking"
     ),
 ) -> None:
     """Run all agents on a task and score the results."""
@@ -195,6 +202,8 @@ def run(
                         branch,
                         base_ref,
                         task.timeout,
+                        no_cost,
+                        task.pricing,
                     )
                     futures[future] = agent_name
 
@@ -248,6 +257,8 @@ def run(
                     branch,
                     base_ref,
                     task.timeout,
+                    no_cost=no_cost,
+                    custom_pricing=task.pricing,
                 )
 
                 if result is None:

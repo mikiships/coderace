@@ -35,6 +35,29 @@ def load_task(path: str | Path) -> Task:
     if scoring_raw is not None and not isinstance(scoring_raw, dict):
         raise ValueError(f"scoring must be a mapping, got {type(scoring_raw).__name__}")
 
+    pricing_raw = data.get("pricing")
+    pricing: dict[str, tuple[float, float]] | None = None
+    if pricing_raw is not None:
+        if not isinstance(pricing_raw, dict):
+            raise ValueError(f"pricing must be a mapping, got {type(pricing_raw).__name__}")
+        pricing = {}
+        for key, entry in pricing_raw.items():
+            if not isinstance(entry, dict):
+                raise ValueError(
+                    f"pricing.{key} must be a mapping with input_per_1m/output_per_1m, "
+                    f"got {type(entry).__name__}"
+                )
+            try:
+                inp = float(entry["input_per_1m"])
+                out = float(entry["output_per_1m"])
+            except KeyError as e:
+                raise ValueError(
+                    f"pricing.{key} missing required field: {e}"
+                ) from e
+            if inp < 0 or out < 0:
+                raise ValueError(f"pricing.{key}: prices must be >= 0")
+            pricing[key] = (inp, out)
+
     task = Task(
         name=data["name"],
         description=data["description"],
@@ -44,6 +67,7 @@ def load_task(path: str | Path) -> Task:
         lint_command=data.get("lint_command"),
         timeout=data.get("timeout", 300),
         scoring=scoring_raw,
+        pricing=pricing,
     )
 
     errors = task.validate()
@@ -78,6 +102,15 @@ agents:
 #   lint: 15
 #   time: 15
 #   lines: 10
+# Optional: override pricing for cost tracking (USD per 1M tokens)
+# Use agent name or model name as key.
+# pricing:
+#   claude:
+#     input_per_1m: 3.00   # override if using a non-default model
+#     output_per_1m: 15.00
+#   codex:
+#     input_per_1m: 3.00
+#     output_per_1m: 15.00
 """
     path.write_text(template)
     return path

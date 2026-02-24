@@ -66,6 +66,8 @@ class Task:
     lint_command: str | None = None
     timeout: int = 300
     scoring: dict[str, float] | None = None
+    # Per-agent or per-model pricing overrides: name -> (input_usd_per_1m, output_usd_per_1m)
+    pricing: dict[str, tuple[float, float]] | None = None
 
     def validate(self) -> list[str]:
         """Return list of validation errors, empty if valid."""
