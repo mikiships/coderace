@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from coderace.adapters.base import BaseAdapter
+from coderace.cost import CostResult, parse_aider_cost
 
 
 class AiderAdapter(BaseAdapter):
@@ -18,3 +21,13 @@ class AiderAdapter(BaseAdapter):
             "--yes",
             "--no-auto-commits",
         ]
+
+    def parse_cost(
+        self,
+        stdout: str,
+        stderr: str,
+        model_name: str = "aider-default",
+        custom_pricing: dict[str, tuple[float, float]] | None = None,
+    ) -> Optional[CostResult]:
+        """Parse cost data from Aider output."""
+        return parse_aider_cost(stdout, stderr, model_name, custom_pricing)
