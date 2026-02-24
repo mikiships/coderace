@@ -1,0 +1,66 @@
+# ci-race-on-pr.yml
+#
+# Drop this file into .github/workflows/ in your repo to automatically race
+# coding agents on pull requests.
+#
+# Two triggers are included:
+#   1. pull_request  — race runs automatically on every PR (uses task file
+#      checked in at the path specified by `task`).
+#   2. pull_request with label "race-agents" — race runs only when a
+#      maintainer adds the label, useful for cost control.
+#
+# Requirements:
+#   - A coderace task YAML file in your repo (default: .github/coderace-task.yaml)
+#   - At least one coding agent CLI available in CI (set up separately)
+#   - GITHUB_TOKEN is provided automatically by GitHub Actions
+
+name: Race Coding Agents
+
+on:
+  # Trigger 1: run on every pull request targeting main
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+  # Trigger 2: run when the "race-agents" label is added to a PR
+  pull_request:
+    types: [labeled]
+
+jobs:
+  race:
+    # For the label trigger, only run when the "race-agents" label is added
+    if: >
+      github.event_name == 'pull_request' && (
+        github.event.action != 'labeled' ||
+        github.event.label.name == 'race-agents'
+      )
+
+    name: Race agents
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # needed to post PR comments
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Install any agent CLIs your task requires.
+      # Example below shows claude (Claude Code) and aider.
+      # Uncomment / adapt as needed.
+      #
+      # - name: Install Claude Code
+      #   run: npm install -g @anthropic-ai/claude-code
+      #   env:
+      #     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      #
+      # - name: Install Aider
+      #   run: pip install aider-chat
+
+      - name: Run coderace
+        uses: mikiships/coderace@v0.3          # pin to a tag in production
+        with:
+          task: .github/coderace-task.yaml     # path to your task YAML
+          agents: claude,aider                  # override agents (optional)
+          parallel: 'false'                     # set 'true' for parallel mode
+          github-token: ${{ secrets.GITHUB_TOKEN }}

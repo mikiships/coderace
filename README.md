@@ -29,6 +29,40 @@ coderace run fix-auth-bug.yaml --parallel
 coderace results fix-auth-bug.yaml
 ```
 
+## `coderace diff` — Race Agents on a Real PR Diff
+
+Turn any git diff into a coderace task with one command:
+
+```bash
+# Race agents to review the latest commit
+git diff HEAD~1 | coderace diff --mode review | coderace run /dev/stdin
+
+# Generate a task YAML from a patch file, then run it
+git diff main...my-branch > my-pr.patch
+coderace diff --file my-pr.patch --mode fix --output task.yaml
+coderace run task.yaml
+```
+
+### Modes
+
+| Mode | What agents are asked to do |
+|------|-----------------------------|
+| `review` | Review the changes and provide feedback on correctness, style, and potential issues |
+| `fix` | Fix bugs or problems introduced by the diff |
+| `improve` | Enhance performance, readability, or robustness of the changed code |
+
+### Flags
+
+```
+--file PATH       Read diff from file instead of stdin
+--mode TEXT       review | fix | improve  (default: review)
+--agents TEXT     Override agent list (repeatable: --agents claude --agents aider)
+--name TEXT       Task name in generated YAML  (default: diff-task)
+--output PATH     Write YAML to file instead of stdout
+--test-command    Test command to embed in the task (default: pytest tests/ -x)
+--lint-command    Lint command to embed in the task (default: ruff check .)
+```
+
 ## Task Format
 
 ```yaml
@@ -169,6 +203,98 @@ Sequential mode (default) runs agents one at a time on the same repo.
 - Works with any agent that has a CLI
 
 The goal isn't "which model is best." It's "which agent solves my specific problem best."
+
+## CI Integration
+
+Use coderace in GitHub Actions to automatically race agents on PRs and post results as comments.
+
+### Quick setup
+
+1. Copy `examples/ci-race-on-pr.yml` into `.github/workflows/` in your repo.
+2. Create a task YAML at `.github/coderace-task.yaml` (see [Task Format](#task-format)).
+3. Install the agent CLIs your task requires (see comments in the workflow file).
+4. Open or update a PR — results appear as a PR comment automatically.
+
+### Workflow: Race on every PR
+
+```yaml
+name: Race Coding Agents
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  race:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run coderace
+        uses: mikiships/coderace@v0.3
+        with:
+          task: .github/coderace-task.yaml
+          agents: claude,aider
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Workflow: Race only when "race-agents" label is added
+
+Cost-control pattern: only race when a maintainer deliberately triggers it.
+
+```yaml
+name: Race Coding Agents (on label)
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  race:
+    if: github.event.label.name == 'race-agents'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run coderace
+        uses: mikiships/coderace@v0.3
+        with:
+          task: .github/coderace-task.yaml
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Action inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `task` | Path to coderace task YAML | _(required)_ |
+| `agents` | Comma-separated agents to race | _(from task file)_ |
+| `parallel` | Run agents in parallel (`true`/`false`) | `false` |
+| `github-token` | Token for posting PR comments | `${{ github.token }}` |
+| `coderace-version` | coderace version to install | `latest` |
+| `python-version` | Python version | `3.11` |
+
+### Example PR comment
+
+The action automatically posts (and updates on re-run) a comment like:
+
+> ✅ **coderace** — `fix-auth-bug` | **Winner: `claude`** (85.0 pts) | 3 agent(s) raced
+>
+> | Rank | Agent | Score | Tests | Lint | Exit | Time (s) | Lines |
+> |------|-------|------:|:-----:|:----:|:----:|---------:|------:|
+> | 1 | `claude` | 85.0 | ✅ | ✅ | ✅ | 10.5 | 42 |
+> | 2 | `codex` | 70.0 | ✅ | ❌ | ✅ | 15.2 | 98 |
+> | 3 | `aider` | 55.0 | ❌ | ✅ | ✅ | 8.1 | 31 |
+
+The action uses a hidden HTML marker to find and update existing comments, so re-running doesn't spam the PR.
 
 ## See Also
 
