@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0] - 2026-02-24
+
+### Added
+
+- **Cost tracking** — Each agent run now includes an estimated API cost. The results table shows a `Cost (USD)` column in terminal, markdown, JSON, and HTML output.
+- **`coderace/cost.py`** — Pricing engine: pricing table for Claude Code (Sonnet 4.6, Opus 4.6), Codex (GPT-5.3), Gemini CLI (2.5 Pro, 3.1 Pro), Aider, and OpenCode. `CostResult` dataclass with `input_tokens`, `output_tokens`, `estimated_cost_usd`, `model_name`, `pricing_source`.
+- **Per-adapter `parse_cost()` methods** — Each adapter extracts token counts or cost info from the agent's stdout/stderr. Falls back to file-size estimation when tokens are unavailable.
+- **`pricing:` section in task YAML** — Override pricing per-agent or per-model with `input_per_1m` / `output_per_1m` (USD per 1M tokens).
+- **`--no-cost` flag** — `coderace run task.yaml --no-cost` disables cost tracking entirely.
+- **HTML report $/score column** — The HTML report now shows cost and cost-per-point for direct efficiency comparison.
+- **Statistical mode cost aggregation** — `--runs N` shows mean ± stddev for cost alongside score and time.
+- **`coderace init` template** — Now includes a commented `pricing:` example section.
+
 ## [0.3.0] - 2026-02-24
 
 ### Added

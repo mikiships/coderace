@@ -170,6 +170,77 @@ scoring:
 
 Weights are normalized automatically (don't need to sum to 100).
 
+## Cost Tracking
+
+coderace automatically estimates API cost for each agent run. After every race, the results table includes a **Cost (USD)** column so you can compare quality-per-dollar, not just quality alone.
+
+```
+┌──────┬────────┬───────┬───────┬──────┬──────┬──────────┬───────┬────────────┐
+│ Rank │ Agent  │ Score │ Tests │ Exit │ Lint │ Time (s) │ Lines │ Cost (USD) │
+├──────┼────────┼───────┼───────┼──────┼──────┼──────────┼───────┼────────────┤
+│  1   │ claude │  85.0 │ PASS  │ PASS │ PASS │     10.5 │    42 │    $0.0063 │
+│  2   │ codex  │  70.0 │ PASS  │ PASS │ FAIL │     15.2 │    98 │    $0.0041 │
+│  3   │ aider  │  55.0 │ FAIL  │ PASS │ PASS │      8.1 │    31 │          - │
+└──────┴────────┴───────┴───────┴──────┴──────┴──────────┴───────┴────────────┘
+```
+
+Cost appears in all output formats:
+- **Terminal** — `Cost (USD)` column (shows `-` when unavailable)
+- **Markdown** — `--format markdown` includes the column
+- **JSON** — `cost` object per agent result with `input_tokens`, `output_tokens`, `estimated_cost_usd`, `model_name`, `pricing_source`
+- **HTML report** — Cost column plus `$/score` ratio column for direct efficiency comparison
+
+### How it works
+
+Each agent adapter parses token counts or cost lines from the agent's CLI output:
+
+| Agent | Source |
+|-------|--------|
+| Claude Code | `usage.input_tokens` / `usage.output_tokens` from JSON output; or "Total cost: $N" lines |
+| Codex | `prompt_tokens=N, completion_tokens=N` usage summary |
+| Gemini CLI | `inputTokenCount=N, outputTokenCount=N` lines |
+| Aider | "Tokens: N sent, N received. Cost: $N message" lines |
+| OpenCode | "Total cost: $N" or generic token lines |
+
+If token counts are unavailable, cost is estimated from input file size + output diff size (marked as `pricing_source: "estimated"`).
+
+### Disable cost tracking
+
+```bash
+coderace run task.yaml --no-cost
+```
+
+## Custom Pricing
+
+Override the default pricing table in your task YAML — useful for custom models, negotiated rates, or open-source deployments.
+
+```yaml
+# pricing: per-agent or per-model overrides (USD per 1M tokens)
+pricing:
+  claude:
+    input_per_1m: 3.00    # default for claude-sonnet-4-6
+    output_per_1m: 15.00
+  codex:
+    input_per_1m: 3.00
+    output_per_1m: 15.00
+  # Or use the model name directly:
+  claude-opus-4-6:
+    input_per_1m: 15.00
+    output_per_1m: 75.00
+```
+
+Keys can be agent names (`claude`, `codex`, `aider`, `gemini`, `opencode`) or model names (`claude-sonnet-4-6`, `gpt-5.3-codex`, `gemini-2.5-pro`). The default pricing table covers:
+
+| Model | Input ($/1M) | Output ($/1M) |
+|-------|-------------|--------------|
+| claude-sonnet-4-6 | $3.00 | $15.00 |
+| claude-opus-4-6 | $15.00 | $75.00 |
+| gpt-5.3-codex | $3.00 | $15.00 |
+| gemini-2.5-pro | $1.25 | $10.00 |
+| gemini-3.1-pro | $1.25 | $10.00 |
+
+Pricing is easy to update: the table lives in `coderace/cost.py` as a plain dict.
+
 ## Supported Agents
 
 | Agent | CLI | Notes |

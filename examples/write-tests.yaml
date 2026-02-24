@@ -35,3 +35,8 @@ scoring:
   lint: 10
   time: 5
   lines: 5
+# Optional: override pricing for cost tracking (USD per 1M tokens)
+# pricing:
+#   claude:
+#     input_per_1m: 3.00
+#     output_per_1m: 15.00

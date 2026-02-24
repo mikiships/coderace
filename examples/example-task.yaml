@@ -21,3 +21,11 @@ timeout: 300
 agents:
   - claude
   - codex
+# Optional: override pricing for cost tracking (USD per 1M tokens)
+# pricing:
+#   claude:
+#     input_per_1m: 3.00
+#     output_per_1m: 15.00
+#   codex:
+#     input_per_1m: 3.00
+#     output_per_1m: 15.00
