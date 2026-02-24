@@ -496,6 +496,69 @@ def results(
 
 
 @app.command()
+def diff(
+    file: Path | None = typer.Option(
+        None, "--file", "-f", help="Read diff from file (default: stdin)"
+    ),
+    mode: str = typer.Option(
+        "review",
+        "--mode",
+        "-m",
+        help="Task mode: review | fix | improve",
+    ),
+    agents: list[str] | None = typer.Option(
+        None, "--agents", "-a", help="Agents to include (repeatable)"
+    ),
+    name: str = typer.Option("diff-task", "--name", "-n", help="Task name"),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Write YAML to file (default: stdout)"
+    ),
+    test_command: str = typer.Option(
+        "pytest tests/ -x", "--test-command", help="Test command for generated task"
+    ),
+    lint_command: str | None = typer.Option(
+        "ruff check .", "--lint-command", help="Lint command for generated task"
+    ),
+) -> None:
+    """Generate a coderace task YAML from a git diff (stdin or --file).
+
+    Examples:
+
+      git diff HEAD~1 | coderace diff --mode fix
+
+      coderace diff --file my.patch --mode review --output task.yaml
+    """
+    from coderace.commands.diff import MODES, generate_task_yaml, read_diff
+
+    if mode not in MODES:
+        console.print(f"[red]Unknown mode {mode!r}. Choose from: {', '.join(sorted(MODES))}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        diff_text = read_diff(file)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+    task_yaml = generate_task_yaml(
+        diff=diff_text,
+        mode=mode,
+        agents=list(agents) if agents else None,
+        name=name,
+        test_command=test_command,
+        lint_command=lint_command,
+    )
+
+    if output is not None:
+        output.write_text(task_yaml, encoding="utf-8")
+        console.print(f"[green]Task YAML written to:[/green] {output}")
+    else:
+        # Print raw YAML without Rich markup
+        import sys
+        sys.stdout.write(task_yaml)
+
+
+@app.command()
 def version() -> None:
     """Show coderace version."""
     console.print(f"coderace {__version__}")
