@@ -1,0 +1,120 @@
+name: 'coderace'
+description: 'Race coding agents on a task and post results as a PR comment'
+author: 'coderace'
+
+inputs:
+  task:
+    description: 'Path to the coderace task YAML file'
+    required: true
+  agents:
+    description: 'Comma-separated list of agents to race (overrides task file)'
+    required: false
+    default: ''
+  parallel:
+    description: 'Run agents in parallel (true/false)'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for posting PR comments (uses GITHUB_TOKEN if not set)'
+    required: false
+    default: ${{ github.token }}
+  coderace-version:
+    description: 'coderace version to install (e.g. "0.3.0" or "latest")'
+    required: false
+    default: 'latest'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+
+outputs:
+  results-json:
+    description: 'Path to the JSON results file'
+    value: ${{ steps.run.outputs.results-json }}
+  comment-id:
+    description: 'ID of the PR comment created or updated'
+    value: ${{ steps.comment.outputs.comment-id }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install coderace
+      shell: bash
+      run: |
+        if [ "${{ inputs.coderace-version }}" = "latest" ]; then
+          pip install coderace --quiet
+        else
+          pip install "coderace==${{ inputs.coderace-version }}" --quiet
+        fi
+
+    - name: Run coderace
+      id: run
+      shell: bash
+      env:
+        CODERACE_TASK: ${{ inputs.task }}
+        CODERACE_AGENTS: ${{ inputs.agents }}
+        CODERACE_PARALLEL: ${{ inputs.parallel }}
+      run: ${{ github.action_path }}/scripts/ci-run.sh
+
+    - name: Format PR comment
+      id: format
+      if: always()
+      shell: bash
+      run: |
+        python "${{ github.action_path }}/scripts/format-comment.py" \
+          --json-file "${{ steps.run.outputs.results-json }}" \
+          --task-name "${{ inputs.task }}" \
+          --output /tmp/coderace-comment.md || echo "No results to format."
+
+    - name: Post or update PR comment
+      id: comment
+      if: always() && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        COMMENT_BODY=$(cat /tmp/coderace-comment.md 2>/dev/null || echo "coderace: no results.")
+        MARKER="<!-- coderace-results -->"
+        FULL_BODY="${MARKER}
+        ${COMMENT_BODY}"
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        REPO="${{ github.repository }}"
+        API="https://api.github.com/repos/${REPO}"
+
+        # Search for existing comment by marker
+        EXISTING=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          "${API}/issues/${PR_NUMBER}/comments" | \
+          python3 -c "
+        import json, sys
+        comments = json.load(sys.stdin)
+        for c in comments:
+            if '<!-- coderace-results -->' in c.get('body', ''):
+                print(c['id'])
+                break
+        ")
+
+        if [ -n "${EXISTING}" ]; then
+          # Update existing comment
+          COMMENT_ID=$(curl -s -X PATCH \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${API}/issues/comments/${EXISTING}" \
+            -d "$(python3 -c "import json, sys; print(json.dumps({'body': sys.stdin.read()}))" <<< "${FULL_BODY}")" | \
+            python3 -c "import json, sys; print(json.load(sys.stdin).get('id', ''))")
+        else
+          # Create new comment
+          COMMENT_ID=$(curl -s -X POST \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${API}/issues/${PR_NUMBER}/comments" \
+            -d "$(python3 -c "import json, sys; print(json.dumps({'body': sys.stdin.read()}))" <<< "${FULL_BODY}")" | \
+            python3 -c "import json, sys; print(json.load(sys.stdin).get('id', ''))")
+        fi
+
+        echo "comment-id=${COMMENT_ID}" >> "$GITHUB_OUTPUT"
