@@ -790,6 +790,12 @@ def dashboard(
     open_browser: bool = typer.Option(
         False, "--open", help="Open dashboard in browser after generation"
     ),
+    publish: bool = typer.Option(
+        False, "--publish", help="Publish dashboard to here.now"
+    ),
+    here_now_key: str | None = typer.Option(
+        None, "--here-now-key", help="here.now API key for persistent publish"
+    ),
 ) -> None:
     """Generate an HTML dashboard from race results."""
     import webbrowser
@@ -816,6 +822,19 @@ def dashboard(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(html, encoding="utf-8")
     console.print(f"[green]Dashboard written to:[/green] {output}")
+
+    if publish:
+        from coderace.publish import PublishError, publish_html
+
+        console.print("[cyan]Publishing to here.now...[/cyan]")
+        try:
+            result = publish_html(html, api_key=here_now_key)
+            console.print(f"[green]Published:[/green] {result.url}")
+            if result.expires:
+                console.print("[dim]Anonymous publish — expires in 24h[/dim]")
+        except PublishError as exc:
+            console.print(f"[red]Publish failed: {exc}[/red]")
+            raise typer.Exit(1)
 
     if open_browser:
         url = output.resolve().as_uri()
