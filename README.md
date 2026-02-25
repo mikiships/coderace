@@ -312,6 +312,44 @@ Example output:
 - **Database location:** `~/.coderace/results.db` by default. Override with `CODERACE_DB` env var.
 - **Skip saving:** `coderace run task.yaml --no-save` to run without persisting results.
 
+## Dashboard & Publishing
+
+Generate a shareable HTML dashboard from your race results:
+
+```bash
+# Generate dashboard.html in current directory
+coderace dashboard
+
+# Custom output path
+coderace dashboard -o report.html
+
+# Filter to a specific task, last 10 races
+coderace dashboard --task fix-auth-bug --last 10
+
+# Custom title and open in browser
+coderace dashboard --title "My Team Benchmarks" --open
+
+# Publish to here.now (anonymous, 24h expiry)
+coderace dashboard --publish
+
+# Publish with API key (persistent URL)
+coderace dashboard --publish --here-now-key YOUR_KEY
+```
+
+The dashboard is a single self-contained HTML file (no external dependencies) with:
+- Aggregate leaderboard table (wins, avg score, avg time, win rate, avg cost)
+- Race history with expandable per-agent details
+- Per-agent performance cards (total races, wins, best score, avg cost)
+- CSS-only cost efficiency bar chart (cost per point)
+- Dark mode default with light/dark toggle
+- Responsive design (readable on mobile)
+
+### Publishing
+
+The `--publish` flag uploads the dashboard to [here.now](https://here.now) for sharing:
+- Without an API key: anonymous publish with 24h expiry
+- With `--here-now-key` or `HERENOW_API_KEY` env var: persistent URL
+
 ## Supported Agents
 
 | Agent | CLI | Notes |

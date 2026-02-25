@@ -85,7 +85,7 @@ Contract: all-day-build-contract-leaderboard.md
 
 ---
 
-## Final Status
+## Final Status (v0.5.0)
 
 - All 5 deliverables complete ✅
 - All checklist items checked ✅
@@ -93,4 +93,76 @@ Contract: all-day-build-contract-leaderboard.md
 - All 286 tests pass ✅
 - Version bumped to 0.5.0 ✅
 - No scope creep, no refactoring outside deliverables ✅
+- Committed after each deliverable ✅
+
+---
+---
+
+# Progress Log: Web Dashboard Export (v0.6.0)
+
+Date: 2026-02-25
+Contract: all-day-build-contract-dashboard.md
+
+---
+
+## D1: Dashboard Generator Core ✅
+
+**What was built:**
+- `coderace/dashboard.py` — `generate_dashboard()` reads from ResultStore, produces self-contained HTML
+- Sections: hero header, aggregate leaderboard, race history (expandable), agent performance cards, CSS-only cost bar chart
+- Responsive CSS with dark/light theme toggle (CSS variables + JS)
+- No external dependencies (all CSS/JS inline)
+
+**Tests:** 29 tests in `tests/test_dashboard.py` — all pass
+
+**Commit:** `23de12d` — D1: dashboard generator core
+
+---
+
+## D2: CLI Command (`coderace dashboard`) ✅
+
+**What was built:**
+- `coderace/commands/dashboard.py` — command module
+- `coderace/cli.py` — `dashboard` command with `--output/-o`, `--task`, `--last`, `--title`, `--open` flags
+- `--open` uses `webbrowser.open()` to open in browser
+- Empty database produces valid "No races yet" page with instructions
+
+**Tests:** 10 tests in `tests/test_dashboard_cli.py` — all pass
+
+**Commit:** `c6781c7` — D2: dashboard CLI command
+
+---
+
+## D3: Publish Integration (`--publish`) ✅
+
+**What was built:**
+- `coderace/publish.py` — here.now API client: 3-step flow (POST /publish → PUT upload → POST finalize)
+- Anonymous publish (24h expiry) and authenticated publish (persistent URL via `--here-now-key` or `HERENOW_API_KEY` env var)
+- `--publish` and `--here-now-key` flags added to dashboard command
+- Uses only stdlib `urllib` (no requests dependency)
+
+**Tests:** 12 tests in `tests/test_publish.py` — all pass
+
+**Commit:** `222d858` — D3: publish integration
+
+---
+
+## D4: Documentation + CHANGELOG ✅
+
+**What was built:**
+- README: "Dashboard & Publishing" section with usage examples and feature list
+- CHANGELOG: v0.6.0 entry listing all new features
+- Version bumped to 0.6.0 in `pyproject.toml` and `coderace/__init__.py`
+- `coderace dashboard --help` shows clear usage with all flags
+
+**Tests:** All 337 tests pass (315 pre-existing + 22 new from D2/D3)
+
+---
+
+## Final Status (v0.6.0)
+
+- All 4 deliverables complete ✅ (D1 was pre-committed)
+- Test count: 315 → 337 = 22 new tests added (D1 had 29 already, total 51 new for dashboard feature) ✅
+- All 337 tests pass ✅
+- Version bumped to 0.6.0 ✅
 - Committed after each deliverable ✅

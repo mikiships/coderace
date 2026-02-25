@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0] - 2026-02-25
+
+### Added
+
+- **`coderace dashboard`** — New command that generates a self-contained, single-file HTML dashboard from the SQLite results database. Includes aggregate leaderboard, race history with expandable details, per-agent performance cards, and CSS-only cost efficiency charts. Dark mode default with light/dark toggle. No external dependencies.
+- **Dashboard CLI flags** — `--output`/`-o` (custom path), `--task` (filter by task), `--last N` (limit races), `--title` (custom title), `--open` (open in browser).
+- **`--publish` flag** — Upload the generated dashboard to here.now for sharing. Anonymous publish (24h expiry) or persistent publish with `--here-now-key` / `HERENOW_API_KEY` env var.
+- **`coderace/publish.py`** — here.now API client implementing the 3-step publish flow (create → upload → finalize) using only stdlib `urllib`.
+- **`coderace/dashboard.py`** — Dashboard HTML generator with responsive CSS, dark/light theme toggle, and expandable race history rows.
+
 ## [0.5.0] - 2026-02-24
 
 ### Added
