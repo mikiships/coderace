@@ -1,0 +1,40 @@
+name: parse-duration-string
+description: |
+  Create a utility function in coderace/utils/duration.py that parses
+  human-readable duration strings into seconds.
+
+  Supported formats:
+  - "30s" -> 30.0
+  - "5m" -> 300.0
+  - "2h" -> 7200.0
+  - "1h30m" -> 5400.0
+  - "2m15s" -> 135.0
+  - "1h2m3s" -> 3723.0
+  - Plain numbers treated as seconds: "120" -> 120.0
+
+  The function signature: parse_duration(s: str) -> float
+  Raise ValueError for invalid inputs (empty string, negative, unknown units).
+
+  Create coderace/utils/__init__.py if it doesn't exist (can be empty).
+
+  Also add tests in tests/test_duration.py:
+  - Test each format above
+  - Test plain number
+  - Test ValueError cases (empty, "abc", "-5s", "1x")
+  - Test case insensitivity ("30S" == "30s")
+
+  Do NOT modify any other files.
+
+repo: .
+test_command: uv run pytest tests/test_duration.py -x -q
+lint_command: uv run ruff check coderace/utils/duration.py
+timeout: 180
+agents:
+  - claude
+  - gemini
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5

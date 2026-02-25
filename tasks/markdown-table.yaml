@@ -1,0 +1,54 @@
+name: markdown-table-formatter
+description: |
+  Create a utility function in coderace/utils/table.py that formats
+  data into a Markdown table string.
+
+  Function signature:
+    format_table(headers: list[str], rows: list[list[str]], align: list[str] | None = None) -> str
+
+  - headers: column names
+  - rows: list of rows, each row is a list of cell strings
+  - align: optional list of "left", "right", or "center" per column.
+    Default is "left" for all columns.
+
+  Output format:
+    | Name   | Score |
+    |:-------|------:|
+    | claude |    85 |
+    | gemini |    72 |
+
+  Alignment markers:
+  - left: `:---`
+  - right: `---:`
+  - center: `:---:`
+
+  Handle edge cases:
+  - Empty rows: return header + separator only
+  - Mismatched row length: pad short rows with empty strings, truncate long rows
+  - Empty headers list: raise ValueError
+
+  Create coderace/utils/__init__.py if it doesn't exist.
+
+  Add tests in tests/test_table.py:
+  - Basic table with 2 columns, 2 rows
+  - All three alignment types
+  - Empty rows
+  - Mismatched row lengths (short and long)
+  - ValueError on empty headers
+  - Single column table
+
+  Do NOT modify any other files.
+
+repo: .
+test_command: uv run pytest tests/test_table.py -x -q
+lint_command: uv run ruff check coderace/utils/table.py
+timeout: 180
+agents:
+  - claude
+  - gemini
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5
