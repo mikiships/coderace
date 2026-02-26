@@ -50,17 +50,27 @@ def checkout(repo: Path, ref: str) -> None:
 def get_diff_stat(repo: Path, base_ref: str) -> tuple[str, int]:
     """Get diff stat and total lines changed against base_ref.
 
+    Stages all files first so new (untracked) files created by agents
+    are included in the diff.
+
     Returns (diff_stat_text, total_lines_changed).
     """
+    # Stage everything so untracked files appear in the diff
+    subprocess.run(
+        ["git", "add", "-A"],
+        cwd=repo,
+        capture_output=True,
+    )
+
     stat_result = subprocess.run(
-        ["git", "diff", "--stat", base_ref],
+        ["git", "diff", "--cached", "--stat", base_ref],
         cwd=repo,
         capture_output=True,
         text=True,
     )
 
     numstat_result = subprocess.run(
-        ["git", "diff", "--numstat", base_ref],
+        ["git", "diff", "--cached", "--numstat", base_ref],
         cwd=repo,
         capture_output=True,
         text=True,
