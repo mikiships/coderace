@@ -28,7 +28,7 @@ description: |
 repo: .
 test_command: uv run pytest tests/test_duration.py -x -q
 lint_command: uv run ruff check coderace/utils/duration.py
-timeout: 180
+timeout: 600
 agents:
   - claude
   - gemini

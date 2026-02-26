@@ -16,7 +16,6 @@ class GeminiAdapter(BaseAdapter):
     def build_command(self, task_description: str) -> list[str]:
         return [
             "gemini",
-            "--non-interactive",
             "-p",
             task_description,
         ]
