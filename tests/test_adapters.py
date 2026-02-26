@@ -40,7 +40,7 @@ def test_gemini_command() -> None:
     adapter = GeminiAdapter()
     cmd = adapter.build_command("Fix the bug")
     assert cmd[0] == "gemini"
-    assert "--non-interactive" in cmd
+    assert "-p" in cmd
     assert "Fix the bug" in cmd
 
 
