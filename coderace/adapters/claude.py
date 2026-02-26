@@ -19,6 +19,7 @@ class ClaudeAdapter(BaseAdapter):
             "--print",
             "--output-format",
             "json",
+            "--dangerously-skip-permissions",
             "-p",
             task_description,
         ]
