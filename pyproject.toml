@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "coderace"
-version = "0.7.0"
+version = "0.7.1"
 description = "Race coding agents against each other on real tasks"
 readme = "README.md"
 license = "MIT"
@@ -38,9 +38,6 @@ Repository = "https://github.com/mikiships/coderace"
 
 [tool.hatch.build.targets.wheel]
 packages = ["coderace"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"coderace/builtins/tasks" = "coderace/builtins/tasks"
 
 [tool.ruff]
 target-version = "py310"
