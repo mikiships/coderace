@@ -54,6 +54,35 @@ CREATE TABLE IF NOT EXISTS agent_results (
 
 CREATE INDEX IF NOT EXISTS idx_agent_results_run ON agent_results(run_id);
 CREATE INDEX IF NOT EXISTS idx_agent_results_agent ON agent_results(agent);
+
+CREATE TABLE IF NOT EXISTS benchmarks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    benchmark_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL,
+    agents TEXT NOT NULL,
+    tasks TEXT NOT NULL,
+    winner TEXT,
+    elapsed REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_benchmarks_timestamp ON benchmarks(timestamp);
+
+CREATE TABLE IF NOT EXISTS benchmark_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    benchmark_id TEXT NOT NULL REFERENCES benchmarks(benchmark_id),
+    task_name TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    score REAL NOT NULL,
+    wall_time REAL NOT NULL,
+    tests_pass INTEGER NOT NULL,
+    exit_clean INTEGER NOT NULL,
+    lint_clean INTEGER NOT NULL,
+    timed_out INTEGER NOT NULL,
+    cost_usd REAL,
+    error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_benchmark_results_bid ON benchmark_results(benchmark_id);
 """
 
 
@@ -333,6 +362,113 @@ class ResultStore:
             )
             for r in rows
         ]
+
+
+    def save_benchmark(self, benchmark_result, stats) -> None:
+        """Save a BenchmarkResult and its stats to the store."""
+        from coderace.benchmark_stats import BenchmarkStats
+
+        conn = self._get_conn()
+        ts = datetime.now(timezone.utc).isoformat()
+        winner = stats.agent_stats[0].agent if stats.agent_stats else None
+        elapsed = benchmark_result.elapsed if benchmark_result.finished_at else None
+
+        agents_str = ",".join(benchmark_result.agents)
+        tasks_str = ",".join(benchmark_result.tasks)
+
+        conn.execute(
+            "INSERT OR REPLACE INTO benchmarks "
+            "(benchmark_id, timestamp, agents, tasks, winner, elapsed) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (benchmark_result.benchmark_id, ts, agents_str, tasks_str, winner, elapsed),
+        )
+
+        for r in benchmark_result.results:
+            conn.execute(
+                "INSERT INTO benchmark_results "
+                "(benchmark_id, task_name, agent, score, wall_time, tests_pass, "
+                "exit_clean, lint_clean, timed_out, cost_usd, error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    benchmark_result.benchmark_id,
+                    r.task_name,
+                    r.agent,
+                    r.score,
+                    r.wall_time,
+                    1 if r.tests_pass else 0,
+                    1 if r.exit_clean else 0,
+                    1 if r.lint_clean else 0,
+                    1 if r.timed_out else 0,
+                    r.cost_usd,
+                    r.error,
+                ),
+            )
+        conn.commit()
+
+    def get_benchmarks(self, limit: int = 10) -> list[dict]:
+        """List past benchmark runs, newest first."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT benchmark_id, timestamp, agents, tasks, winner, elapsed "
+            "FROM benchmarks ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            tasks_list = row["tasks"].split(",") if row["tasks"] else []
+            result.append({
+                "benchmark_id": row["benchmark_id"],
+                "timestamp": row["timestamp"],
+                "agents": row["agents"],
+                "task_count": len(tasks_list),
+                "winner": row["winner"] or "-",
+                "elapsed": row["elapsed"],
+            })
+        return result
+
+    def get_benchmark(self, benchmark_id: str) -> dict | None:
+        """Retrieve a full benchmark result by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM benchmarks WHERE benchmark_id = ?",
+            (benchmark_id,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        detail_rows = conn.execute(
+            "SELECT * FROM benchmark_results WHERE benchmark_id = ?",
+            (benchmark_id,),
+        ).fetchall()
+
+        agents = row["agents"].split(",") if row["agents"] else []
+        tasks = row["tasks"].split(",") if row["tasks"] else []
+
+        results = [
+            {
+                "task_name": r["task_name"],
+                "agent": r["agent"],
+                "score": r["score"],
+                "wall_time": r["wall_time"],
+                "tests_pass": bool(r["tests_pass"]),
+                "exit_clean": bool(r["exit_clean"]),
+                "lint_clean": bool(r["lint_clean"]),
+                "timed_out": bool(r["timed_out"]),
+                "cost_usd": r["cost_usd"],
+                "error": r["error"],
+            }
+            for r in detail_rows
+        ]
+
+        return {
+            "benchmark_id": row["benchmark_id"],
+            "timestamp": row["timestamp"],
+            "agents": agents,
+            "tasks": tasks,
+            "winner": row["winner"],
+            "elapsed": row["elapsed"],
+            "results": results,
+        }
 
 
 def _parse_since(since: str) -> str | None:
