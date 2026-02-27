@@ -26,6 +26,7 @@ from coderace.task import create_template, load_task
 from coderace.types import AgentResult, Score
 
 from coderace.commands.tasks import app as tasks_app
+from coderace.commands.benchmark import app as benchmark_app
 
 app = typer.Typer(
     name="coderace",
@@ -33,6 +34,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(tasks_app, name="tasks")
+app.add_typer(benchmark_app, name="benchmark")
 console = Console()
 
 
