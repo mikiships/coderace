@@ -1,3 +1,75 @@
+# Progress Log: Built-in Task Library (v0.7.0)
+
+Date: 2026-02-26
+Contract: all-day-build-contract-builtin-tasks.md
+
+---
+
+## D1: Built-in Task Package (core) ✅
+
+**What was built:**
+- `coderace/builtins/__init__.py` — `list_builtins()`, `load_builtin()`, `get_builtin_path()` API
+- Uses `importlib.resources` for package data resolution
+- `coderace/builtins/tasks/` directory
+- Updated `pyproject.toml` with hatch build config for YAML file inclusion
+
+**Tests:** 7 tests in `tests/test_builtins.py` — all pass
+
+**Commit:** `2356071`
+
+---
+
+## D2: Curated Task Library (6 tasks) ✅
+
+**What was built:**
+- `fibonacci.yaml` — Easy: Fibonacci with memoization + tests
+- `json-parser.yaml` — Medium: JSON parser from scratch
+- `markdown-to-html.yaml` — Medium: Markdown subset to HTML converter
+- `csv-analyzer.yaml` — Medium: CLI CSV summary statistics tool
+- `http-server.yaml` — Medium-Hard: HTTP/1.1 server with stdlib socket
+- `binary-search-tree.yaml` — Hard: AVL tree with full operations
+
+**Tests:** Added validation test for all 6 tasks
+
+**Commit:** `51e3d86`
+
+---
+
+## D3: CLI Integration ✅
+
+**What was built:**
+- `coderace/commands/tasks.py` — `list` and `show` subcommands
+- Registered `tasks` command group in `cli.py`
+- `--builtin` flag on `run` command with mutual exclusion from file path
+
+**Tests:** 6 tests in `tests/test_tasks_cli.py` — all pass
+
+**Commit:** `20b9cfe`
+
+---
+
+## D4: Documentation ✅
+
+**What was built:**
+- README: Quick Start with `--builtin`, "Built-in Tasks" section with difficulty table
+- CHANGELOG: v0.7.0 entry
+- Version bumped to 0.7.0 in `pyproject.toml` and `coderace/__init__.py`
+
+**Commit:** `93921d0`
+
+---
+
+## Final Status (v0.7.0)
+
+- All 4 deliverables complete ✅
+- Test count: 337 → 351 = 14 new tests added ✅
+- All 351 tests pass ✅
+- Version bumped to 0.7.0 ✅
+- Committed after each deliverable ✅
+
+---
+---
+
 # Progress Log: Leaderboard & Result History (v0.5.0)
 
 Date: 2026-02-24
