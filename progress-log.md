@@ -1,240 +1,78 @@
-# Progress Log: Built-in Task Library (v0.7.0)
+# Benchmark Suite Build Progress Log
 
-Date: 2026-02-26
-Contract: all-day-build-contract-builtin-tasks.md
+## Date: 2026-02-27
 
----
+### D1: Benchmark Runner Core ✅
 
-## D1: Built-in Task Package (core) ✅
+**Built:**
+- `coderace/benchmark.py` — `BenchmarkResult`, `TaskAgentResult` dataclasses, `run_benchmark()` orchestrator, sequential + parallel execution, `list_benchmark_tasks()` with difficulty filtering
+- `coderace/commands/benchmark.py` — CLI with `--agents`, `--tasks`, `--difficulty`, `--timeout`, `--parallel`, `--dry-run`, `--format`, `--output`, `--no-save`; also `benchmark history` and `benchmark show` subcommands
+- Updated `coderace/cli.py` to register `benchmark_app`
 
-**What was built:**
-- `coderace/builtins/__init__.py` — `list_builtins()`, `load_builtin()`, `get_builtin_path()` API
-- Uses `importlib.resources` for package data resolution
-- `coderace/builtins/tasks/` directory
-- Updated `pyproject.toml` with hatch build config for YAML file inclusion
-
-**Tests:** 7 tests in `tests/test_builtins.py` — all pass
-
-**Commit:** `2356071`
+**Tests:** Covered in D5 (test_benchmark.py)
+**Commit:** `063161c` feat(D1)
 
 ---
 
-## D2: Curated Task Library (6 tasks) ✅
+### D2: Aggregate Statistics ✅
 
-**What was built:**
-- `fibonacci.yaml` — Easy: Fibonacci with memoization + tests
-- `json-parser.yaml` — Medium: JSON parser from scratch
-- `markdown-to-html.yaml` — Medium: Markdown subset to HTML converter
-- `csv-analyzer.yaml` — Medium: CLI CSV summary statistics tool
-- `http-server.yaml` — Medium-Hard: HTTP/1.1 server with stdlib socket
-- `binary-search-tree.yaml` — Hard: AVL tree with full operations
+**Built:**
+- `coderace/benchmark_stats.py` — `compute_benchmark_stats()` producing `BenchmarkStats` with:
+  - Per-agent: total_score, avg_score, pass_rate, avg_time, total_cost, cost_efficiency, win_count
+  - Per-task: best_agent, best_score, avg_score, fastest_agent, fastest_time
+  - Win matrix: `win_matrix[task][agent]` = 1 if agent won that task
 
-**Tests:** Added validation test for all 6 tasks
-
-**Commit:** `51e3d86`
+**Commit:** `343a6ab` feat(D2)
 
 ---
 
-## D3: CLI Integration ✅
+### D3: Benchmark Report Formats ✅
 
-**What was built:**
-- `coderace/commands/tasks.py` — `list` and `show` subcommands
-- Registered `tasks` command group in `cli.py`
-- `--builtin` flag on `run` command with mutual exclusion from file path
+**Built:**
+- `coderace/benchmark_report.py`:
+  - `render_benchmark_terminal()` — Rich table (tasks as rows, agents as columns), summary rows (TOTAL, Win Rate, Avg Time, Total Cost), winner callout
+  - `render_benchmark_markdown()` — GitHub-flavored pipe table with Task Insights section
+  - `render_benchmark_html()` — self-contained HTML with dark theme matching existing html_report.py style
 
-**Tests:** 6 tests in `tests/test_tasks_cli.py` — all pass
-
-**Commit:** `20b9cfe`
-
----
-
-## D4: Documentation ✅
-
-**What was built:**
-- README: Quick Start with `--builtin`, "Built-in Tasks" section with difficulty table
-- CHANGELOG: v0.7.0 entry
-- Version bumped to 0.7.0 in `pyproject.toml` and `coderace/__init__.py`
-
-**Commit:** `93921d0`
+**Commit:** `a951338` feat(D3)
 
 ---
 
-## Final Status (v0.7.0)
+### D4: Benchmark Result Storage ✅
 
-- All 4 deliverables complete ✅
-- Test count: 337 → 351 = 14 new tests added ✅
-- All 351 tests pass ✅
-- Version bumped to 0.7.0 ✅
-- Committed after each deliverable ✅
+**Built:**
+- Updated `coderace/store.py`:
+  - New SQLite tables: `benchmarks`, `benchmark_results`
+  - `ResultStore.save_benchmark()` — persists full benchmark run + results
+  - `ResultStore.get_benchmarks()` — lists past runs newest first
+  - `ResultStore.get_benchmark()` — retrieves full detail by ID
+- CLI commands `benchmark history` and `benchmark show` wired to store
 
----
----
-
-# Progress Log: Leaderboard & Result History (v0.5.0)
-
-Date: 2026-02-24
-Contract: all-day-build-contract-leaderboard.md
+**Commit:** `f37bb0c` feat(D4)
 
 ---
 
-## D1: Result Store ✅
+### D5: Documentation + Tests ✅
 
-**What was built:**
-- `coderace/store.py` — `ResultStore` class with SQLite backend at `~/.coderace/results.db`
-- Schema: `runs` table (task_name, timestamp, git_ref, config_hash, agent_count) + `agent_results` table (score, time, cost, lines, pass/fail, model, winner flag)
-- Methods: `save_run()`, `get_runs()`, `get_agent_stats()`
-- Auto-create DB and tables on first use (no init step)
-- WAL mode, proper indexes, foreign keys, concurrent write support
-- Configurable via `CODERACE_DB` env var
+**Built:**
+- `tests/test_benchmark.py` — 41 new tests covering:
+  - D1: BenchmarkResult dataclass, TaskAgentResult, list_benchmark_tasks, difficulty filtering
+  - D2: All aggregate stat fields, win matrix, edge cases (zero score, no cost, single agent)
+  - D3: Terminal output (no crash), markdown structure, HTML structure, timeout/error rendering
+  - D4: Save/retrieve, not-found, empty store, result detail accuracy
+  - Integration: dry-run combinations, count display, empty filter
+- Updated `README.md` with Benchmarking section (usage, example output, all flags table, history commands)
 
-**Tests:** 25 new tests in `tests/test_store.py` — all pass
-- Save/query/filter, empty DB, concurrent writes, field round-trip, env var
-
-**Commit:** `13b5cf4` — D1: result store
+**Commit:** `ef175e5` feat(D5)
 
 ---
 
-## D2: Auto-Save on Run ✅
+### Final Test Count
 
-**What was built:**
-- `coderace/cli.py` — `_auto_save_to_store()` helper called after scoring
-- `--no-save` flag to disable persistence
-- Graceful fallback: DB errors don't crash the run (try/except with pass)
-- Scores mapped to store format including cost and model data
+- Existing: 351
+- New: 41
+- **Total: 392 passing** ✅
 
-**Tests:** 8 new tests in `tests/test_cli_store_integration.py` — all pass
-- Normal save, multi-run, cost propagation, graceful error, field mapping, winner detection
+### Build Status: COMPLETE
 
-**Commit:** `37d4f65` — D2: auto-save on run
-
----
-
-## D3: `coderace leaderboard` Command ✅
-
-**What was built:**
-- `coderace/commands/leaderboard.py` — formatting functions (terminal, markdown, json, html)
-- `coderace/cli.py` — `leaderboard` command with `--task`, `--since`, `--min-runs`, `--format` options
-- Columns: Agent | Wins | Races | Win% | Avg Score | Avg Cost | Avg Time
-- Ranking by win rate (descending), then avg score
-
-**Tests:** 19 new tests in `tests/test_leaderboard.py` — all pass
-- Empty DB, format functions (terminal/markdown/json/html), CLI filters, ranking logic, help text
-
-**Commit:** `3745037` — D3: coderace leaderboard command
-
----
-
-## D4: `coderace history` Command ✅
-
-**What was built:**
-- `coderace/commands/history.py` — formatting functions (terminal, markdown, json)
-- `coderace/cli.py` — `history` command with `--task`, `--agent`, `--limit`, `--format` options
-- Columns: Run ID | Date | Task | Agents | Winner | Best Score
-- Newest first ordering
-
-**Tests:** 16 new tests in `tests/test_history.py` — all pass
-- Empty DB, format functions, CLI filters, JSON structure, ordering, help text
-
-**Commit:** `2095bcc` — D4: coderace history command
-
----
-
-## D5: Documentation & README Update ✅
-
-**What was built:**
-- `README.md` — "Leaderboard & History" section with usage examples and example output tables
-- `CHANGELOG.md` — v0.5.0 entry listing all new features
-- Version bumped to 0.5.0 in `pyproject.toml` and `coderace/__init__.py`
-- `coderace leaderboard --help` and `coderace history --help` show clear usage
-
-**Tests:** 4 new integration tests in `tests/test_full_workflow.py` — all pass
-- Full workflow: save → leaderboard → history roundtrip
-- Corrupted DB graceful handling
-- Single-agent race
-- Auto-save → query roundtrip
-
-**Commit:** `b4b4ee8` — D5: documentation
-
----
-
-## Final Status (v0.5.0)
-
-- All 5 deliverables complete ✅
-- All checklist items checked ✅
-- Test count: 214 (pre-existing) → 286 (final) = 72 new tests added (target was 40+) ✅
-- All 286 tests pass ✅
-- Version bumped to 0.5.0 ✅
-- No scope creep, no refactoring outside deliverables ✅
-- Committed after each deliverable ✅
-
----
----
-
-# Progress Log: Web Dashboard Export (v0.6.0)
-
-Date: 2026-02-25
-Contract: all-day-build-contract-dashboard.md
-
----
-
-## D1: Dashboard Generator Core ✅
-
-**What was built:**
-- `coderace/dashboard.py` — `generate_dashboard()` reads from ResultStore, produces self-contained HTML
-- Sections: hero header, aggregate leaderboard, race history (expandable), agent performance cards, CSS-only cost bar chart
-- Responsive CSS with dark/light theme toggle (CSS variables + JS)
-- No external dependencies (all CSS/JS inline)
-
-**Tests:** 29 tests in `tests/test_dashboard.py` — all pass
-
-**Commit:** `23de12d` — D1: dashboard generator core
-
----
-
-## D2: CLI Command (`coderace dashboard`) ✅
-
-**What was built:**
-- `coderace/commands/dashboard.py` — command module
-- `coderace/cli.py` — `dashboard` command with `--output/-o`, `--task`, `--last`, `--title`, `--open` flags
-- `--open` uses `webbrowser.open()` to open in browser
-- Empty database produces valid "No races yet" page with instructions
-
-**Tests:** 10 tests in `tests/test_dashboard_cli.py` — all pass
-
-**Commit:** `c6781c7` — D2: dashboard CLI command
-
----
-
-## D3: Publish Integration (`--publish`) ✅
-
-**What was built:**
-- `coderace/publish.py` — here.now API client: 3-step flow (POST /publish → PUT upload → POST finalize)
-- Anonymous publish (24h expiry) and authenticated publish (persistent URL via `--here-now-key` or `HERENOW_API_KEY` env var)
-- `--publish` and `--here-now-key` flags added to dashboard command
-- Uses only stdlib `urllib` (no requests dependency)
-
-**Tests:** 12 tests in `tests/test_publish.py` — all pass
-
-**Commit:** `222d858` — D3: publish integration
-
----
-
-## D4: Documentation + CHANGELOG ✅
-
-**What was built:**
-- README: "Dashboard & Publishing" section with usage examples and feature list
-- CHANGELOG: v0.6.0 entry listing all new features
-- Version bumped to 0.6.0 in `pyproject.toml` and `coderace/__init__.py`
-- `coderace dashboard --help` shows clear usage with all flags
-
-**Tests:** All 337 tests pass (315 pre-existing + 22 new from D2/D3)
-
----
-
-## Final Status (v0.6.0)
-
-- All 4 deliverables complete ✅ (D1 was pre-committed)
-- Test count: 315 → 337 = 22 new tests added (D1 had 29 already, total 51 new for dashboard feature) ✅
-- All 337 tests pass ✅
-- Version bumped to 0.6.0 ✅
-- Committed after each deliverable ✅
+All deliverables checked. All tests passing. Committed after each deliverable.
