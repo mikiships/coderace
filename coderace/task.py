@@ -29,7 +29,10 @@ def load_task(path: str | Path) -> Task:
     repo_str = data.get("repo", ".")
     repo = Path(repo_str)
     if not repo.is_absolute():
-        repo = path.parent / repo
+        # Resolve relative to CWD, not the task file location.
+        # This matches user expectation: `repo: .` means "current directory"
+        # when running `coderace run tasks/my-task.yaml` from the project root.
+        repo = Path.cwd() / repo
 
     scoring_raw = data.get("scoring")
     if scoring_raw is not None and not isinstance(scoring_raw, dict):
