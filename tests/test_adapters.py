@@ -22,7 +22,7 @@ def test_codex_command() -> None:
     adapter = CodexAdapter()
     cmd = adapter.build_command("Fix the bug")
     assert cmd[0] == "codex"
-    assert "--quiet" in cmd
+    assert "--full-auto" in cmd
     assert "Fix the bug" in cmd
 
 
