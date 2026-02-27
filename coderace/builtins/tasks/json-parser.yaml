@@ -1,0 +1,53 @@
+name: json-parser
+description: |
+  Build a simple JSON parser from scratch (no json module allowed).
+
+  Create a file called `json_parser.py` with the following function:
+
+  `parse_json(text: str) -> object`
+    - Parse a JSON string and return the corresponding Python object
+    - Supported types:
+      - Strings (with escape sequences: \", \\, \/, \b, \f, \n, \r, \t)
+      - Numbers (integers and floats, including negative and exponent notation)
+      - Booleans (true, false)
+      - Null (null -> None)
+      - Arrays (-> list)
+      - Objects (-> dict)
+    - Raise ValueError for invalid JSON input
+    - Do NOT use the built-in json module or any third-party JSON library
+
+  Create a file called `test_json_parser.py` with tests covering:
+  - Parse strings: '"hello"' -> "hello"
+  - Parse strings with escapes: '"line\\nbreak"' -> "line\nbreak"
+  - Parse integers: '42' -> 42
+  - Parse floats: '3.14' -> 3.14
+  - Parse negative numbers: '-10' -> -10
+  - Parse exponent notation: '1e3' -> 1000.0
+  - Parse booleans: 'true' -> True, 'false' -> False
+  - Parse null: 'null' -> None
+  - Parse arrays: '[1, 2, 3]' -> [1, 2, 3]
+  - Parse nested arrays: '[[1], [2, 3]]' -> [[1], [2, 3]]
+  - Parse objects: '{"a": 1}' -> {"a": 1}
+  - Parse nested objects: '{"a": {"b": 2}}' -> {"a": {"b": 2}}
+  - Parse mixed nesting: '{"list": [1, true, null]}' -> {"list": [1, True, None]}
+  - Parse empty structures: '[]' -> [], '{}' -> {}
+  - Parse whitespace handling: '  { "a" : 1 }  ' -> {"a": 1}
+  - Invalid JSON raises ValueError: '', '{', '[1,]', etc.
+
+  Do NOT modify any other files.
+repo: .
+test_command: python -m pytest test_json_parser.py -x -q
+lint_command: ruff check json_parser.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5

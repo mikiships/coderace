@@ -1,0 +1,72 @@
+name: binary-search-tree
+description: |
+  Implement a self-balancing binary search tree (AVL tree) with comprehensive tests.
+
+  Create a file called `bst.py` with the following classes and methods:
+
+  class Node:
+      def __init__(self, key: int, value: object = None):
+          self.key = key
+          self.value = value
+          self.left: Node | None = None
+          self.right: Node | None = None
+          self.height: int = 1
+
+  class AVLTree:
+      def __init__(self):
+          self.root: Node | None = None
+
+      def insert(self, key: int, value: object = None) -> None:
+          """Insert a key-value pair. If key exists, update the value."""
+
+      def search(self, key: int) -> object | None:
+          """Return the value for the given key, or None if not found."""
+
+      def delete(self, key: int) -> bool:
+          """Delete a key. Return True if found and deleted, False if not found."""
+
+      def in_order(self) -> list[int]:
+          """Return all keys in sorted (in-order) order."""
+
+      def __len__(self) -> int:
+          """Return the number of nodes in the tree."""
+
+      def __contains__(self, key: int) -> bool:
+          """Support 'key in tree' syntax."""
+
+  The AVL tree must maintain balance after every insert and delete:
+  - Track height of each node
+  - Perform rotations (left, right, left-right, right-left) when balance
+    factor (left height - right height) exceeds 1 or drops below -1
+  - After N insertions, tree height must be O(log N)
+
+  Create a file called `test_bst.py` with tests covering:
+  - Insert and search single element
+  - Insert multiple elements and verify in-order traversal is sorted
+  - Update existing key's value
+  - Search for missing key returns None
+  - Delete leaf node, node with one child, node with two children
+  - Delete missing key returns False
+  - __len__ tracks count correctly after insert and delete
+  - __contains__ works correctly
+  - Balance verification: insert 1000 sequential keys (1..1000), verify tree
+    height <= 1.45 * log2(1001) (AVL guarantee)
+  - In-order after mixed inserts and deletes
+
+  Do NOT modify any other files.
+repo: .
+test_command: python -m pytest test_bst.py -x -q
+lint_command: ruff check bst.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5

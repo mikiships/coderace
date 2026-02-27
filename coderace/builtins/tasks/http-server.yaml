@@ -1,0 +1,65 @@
+name: http-server
+description: |
+  Build a minimal HTTP/1.1 server using only the Python standard library.
+
+  Create a file called `http_server.py` with:
+
+  class SimpleHTTPServer:
+      def __init__(self, host: str = "127.0.0.1", port: int = 0, root_dir: str = "."):
+          """Initialize the server. port=0 means pick an available port."""
+
+      def start(self) -> None:
+          """Start serving in a background thread."""
+
+      def stop(self) -> None:
+          """Stop the server and clean up."""
+
+      @property
+      def port(self) -> int:
+          """Return the actual port the server is listening on."""
+
+  Requirements:
+  - Use only `socket` and standard library modules (no http.server)
+  - Handle GET requests for static files under root_dir
+  - Return proper HTTP/1.1 responses with status line and headers:
+    - 200 OK with Content-Type and Content-Length for existing files
+    - 404 Not Found for missing files
+    - 405 Method Not Allowed for non-GET methods
+  - Content-Type mapping (by extension):
+    - .html -> text/html
+    - .css -> text/css
+    - .js -> application/javascript
+    - .json -> application/json
+    - .txt -> text/plain
+    - default -> application/octet-stream
+  - Serve index.html when a directory path is requested
+  - Must not allow path traversal (e.g., /../../../etc/passwd must return 404)
+
+  Create a file called `test_http_server.py` with tests covering:
+  - GET an existing file returns 200 with correct Content-Type and body
+  - GET a missing file returns 404
+  - Correct Content-Type for .html, .txt, .json, .css, .js files
+  - Directory request serves index.html
+  - Path traversal attempt returns 403 or 404
+  - Server start/stop lifecycle works
+
+  Tests should use urllib.request or socket to make HTTP requests to the server.
+  Use a temporary directory as root_dir for test files.
+
+  Do NOT modify any other files.
+repo: .
+test_command: python -m pytest test_http_server.py -x -q
+lint_command: ruff check http_server.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5

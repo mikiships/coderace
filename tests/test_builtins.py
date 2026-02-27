@@ -7,11 +7,22 @@ import pytest
 from coderace.builtins import get_builtin_path, list_builtins, load_builtin
 
 
+EXPECTED_BUILTINS = [
+    "binary-search-tree",
+    "csv-analyzer",
+    "fibonacci",
+    "http-server",
+    "json-parser",
+    "markdown-to-html",
+]
+
+
 def test_list_builtins_returns_list() -> None:
     names = list_builtins()
     assert isinstance(names, list)
-    assert len(names) >= 1
-    assert "fibonacci" in names
+    assert len(names) >= 6
+    for expected in EXPECTED_BUILTINS:
+        assert expected in names
 
 
 def test_list_builtins_sorted() -> None:
@@ -51,3 +62,16 @@ def test_get_builtin_path_exists() -> None:
 def test_get_builtin_path_missing() -> None:
     with pytest.raises(FileNotFoundError, match="not found"):
         get_builtin_path("nonexistent-task-xyz")
+
+
+def test_all_builtins_valid_yaml() -> None:
+    """Every built-in task must be valid YAML with all expected fields."""
+    required = {"name", "description", "test_command", "agents"}
+    for name in EXPECTED_BUILTINS:
+        data = load_builtin(name)
+        missing = required - set(data.keys())
+        assert not missing, f"Built-in {name!r} missing: {missing}"
+        assert isinstance(data["agents"], list)
+        assert len(data["agents"]) >= 1
+        assert isinstance(data.get("timeout", 300), int)
+        assert isinstance(data.get("scoring", {}), dict)

@@ -1,0 +1,63 @@
+name: csv-analyzer
+description: |
+  Build a CLI tool that reads CSV data from stdin and outputs summary statistics.
+
+  Create a file called `csv_analyzer.py` that:
+  - Reads CSV data from stdin (using the csv module is allowed)
+  - Outputs a summary report to stdout with the following information:
+    - Row count (excluding header)
+    - Column count
+    - For each column:
+      - Column name
+      - Type: "numeric" if all non-empty values parse as int/float, else "text"
+      - Non-empty count
+      - For numeric columns: min, max, mean (rounded to 2 decimal places)
+      - For text columns: number of unique values
+
+  Output format (one section per column, separated by blank lines):
+
+    Rows: <N>
+    Columns: <M>
+
+    Column: <name>
+    Type: numeric
+    Non-empty: <count>
+    Min: <value>
+    Max: <value>
+    Mean: <value>
+
+    Column: <name>
+    Type: text
+    Non-empty: <count>
+    Unique: <count>
+
+  The script should be runnable as: echo "csv data" | python csv_analyzer.py
+
+  Create a file called `test_csv_analyzer.py` with tests covering:
+  - Basic numeric CSV: verify row count, column types, min/max/mean
+  - Mixed numeric and text columns
+  - Empty values are skipped in statistics
+  - Single column CSV
+  - CSV with only headers (0 rows)
+  - Mean is rounded to 2 decimal places
+
+  Tests should run csv_analyzer.py as a subprocess with CSV input piped to stdin
+  and verify the stdout output.
+
+  Do NOT modify any other files.
+repo: .
+test_command: python -m pytest test_csv_analyzer.py -x -q
+lint_command: ruff check csv_analyzer.py
+timeout: 300
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5

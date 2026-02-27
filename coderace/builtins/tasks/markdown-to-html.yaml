@@ -1,0 +1,50 @@
+name: markdown-to-html
+description: |
+  Convert a subset of Markdown to HTML.
+
+  Create a file called `md2html.py` with the following function:
+
+  `markdown_to_html(text: str) -> str`
+    - Convert Markdown text to HTML
+    - Supported Markdown features:
+      - Headers: # H1, ## H2, ### H3, #### H4, ##### H5, ###### H6
+        -> <h1>H1</h1>, <h2>H2</h2>, etc.
+      - Bold: **text** -> <strong>text</strong>
+      - Italic: *text* -> <em>text</em>
+      - Links: [text](url) -> <a href="url">text</a>
+      - Inline code: `code` -> <code>code</code>
+      - Code blocks: ```\ncode\n``` -> <pre><code>code</code></pre>
+      - Paragraphs: consecutive non-blank lines wrapped in <p>...</p>
+      - Blank lines separate paragraphs
+    - Return the HTML as a string (no full document wrapper needed)
+
+  Create a file called `test_md2html.py` with tests covering:
+  - Each header level (h1 through h6)
+  - Bold text conversion
+  - Italic text conversion
+  - Links with text and URL
+  - Inline code spans
+  - Fenced code blocks (triple backtick)
+  - Paragraph wrapping
+  - Multiple paragraphs separated by blank lines
+  - Mixed inline formatting: "**bold** and *italic*"
+  - Nested formatting: "**bold *and italic***"
+  - Empty input returns empty string
+
+  Do NOT modify any other files.
+repo: .
+test_command: python -m pytest test_md2html.py -x -q
+lint_command: ruff check md2html.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5
