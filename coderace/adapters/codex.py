@@ -16,9 +16,8 @@ class CodexAdapter(BaseAdapter):
     def build_command(self, task_description: str) -> list[str]:
         return [
             "codex",
-            "--quiet",
+            "exec",
             "--full-auto",
-            "-p",
             task_description,
         ]
 
