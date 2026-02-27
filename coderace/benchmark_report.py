@@ -1,0 +1,296 @@
+"""Benchmark report rendering: terminal, markdown, and HTML."""
+
+from __future__ import annotations
+
+import html as _html_mod
+from datetime import datetime, timezone
+from typing import Optional
+
+from rich.console import Console
+from rich.table import Table
+
+from coderace.benchmark import BenchmarkResult
+from coderace.benchmark_stats import BenchmarkStats
+
+
+def render_benchmark_terminal(
+    result: BenchmarkResult,
+    stats: BenchmarkStats,
+    console: Optional[Console] = None,
+) -> None:
+    """Render a Rich terminal table for the benchmark results."""
+    console = console or Console()
+
+    agents = result.agents
+    tasks = result.tasks
+
+    # Lookup: (task, agent) -> TaskAgentResult
+    lookup = {(r.task_name, r.agent): r for r in result.results}
+
+    # Build table: tasks as rows, agents as columns
+    table = Table(title="coderace benchmark", show_lines=True, expand=False)
+    table.add_column("Task", style="bold")
+    for agent in agents:
+        table.add_column(agent, justify="center")
+
+    for task_name in tasks:
+        row = [task_name]
+        for agent in agents:
+            r = lookup.get((task_name, agent))
+            if r is None:
+                row.append("-")
+            elif r.error:
+                row.append("[red]ERR[/red]")
+            elif r.timed_out:
+                row.append(f"[yellow]TIMEOUT[/yellow]")
+            else:
+                score_str = f"{r.score:.1f}"
+                time_str = f"({r.wall_time:.0f}s)"
+                row.append(f"[green]{score_str}[/green] [dim]{time_str}[/dim]")
+        table.add_row(*row)
+
+    # Summary rows
+    agent_stat_map = {s.agent: s for s in stats.agent_stats}
+
+    # Total score row
+    total_row = ["[bold]TOTAL[/bold]"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        total_row.append(f"[bold]{s.total_score:.1f}[/bold]" if s else "-")
+    table.add_row(*total_row)
+
+    # Win rate row
+    win_row = ["[bold]Win Rate[/bold]"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        if s and s.task_count > 0:
+            pct = int(s.win_count / s.task_count * 100)
+            win_row.append(f"{pct}%")
+        else:
+            win_row.append("-")
+    table.add_row(*win_row)
+
+    # Avg time row
+    time_row = ["[bold]Avg Time[/bold]"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        time_row.append(f"{s.avg_time:.1f}s" if s else "-")
+    table.add_row(*time_row)
+
+    # Total cost row
+    cost_row = ["[bold]Total Cost[/bold]"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        if s and s.total_cost is not None:
+            cost_row.append(f"${s.total_cost:.4f}")
+        else:
+            cost_row.append("-")
+    table.add_row(*cost_row)
+
+    console.print(table)
+
+    # Winner callout
+    if stats.agent_stats:
+        winner = stats.agent_stats[0]
+        console.print(f"\n[bold green]Winner: {winner.agent}[/bold green] "
+                      f"(total score: {winner.total_score:.1f}, "
+                      f"{winner.win_count}/{winner.task_count} task wins)")
+
+
+def render_benchmark_markdown(
+    result: BenchmarkResult,
+    stats: BenchmarkStats,
+) -> str:
+    """Render a GitHub-flavored markdown table for the benchmark results."""
+    agents = result.agents
+    tasks = result.tasks
+    lookup = {(r.task_name, r.agent): r for r in result.results}
+    agent_stat_map = {s.agent: s for s in stats.agent_stats}
+
+    lines: list[str] = []
+    lines.append("# coderace Benchmark Results\n")
+    lines.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n")
+    lines.append(f"Benchmark ID: `{result.benchmark_id}`\n")
+
+    # Header row
+    header = "| Task | " + " | ".join(agents) + " |"
+    separator = "|------|" + "|".join(["------"] * len(agents)) + "|"
+    lines.append(header)
+    lines.append(separator)
+
+    for task_name in tasks:
+        cells = [task_name]
+        for agent in agents:
+            r = lookup.get((task_name, agent))
+            if r is None:
+                cells.append("-")
+            elif r.error:
+                cells.append("ERR")
+            elif r.timed_out:
+                cells.append("TIMEOUT")
+            else:
+                cells.append(f"{r.score:.1f} ({r.wall_time:.0f}s)")
+        lines.append("| " + " | ".join(cells) + " |")
+
+    # Summary separator
+    lines.append("|------|" + "|".join(["------"] * len(agents)) + "|")
+
+    # Total
+    total_cells = ["**TOTAL**"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        total_cells.append(f"**{s.total_score:.1f}**" if s else "-")
+    lines.append("| " + " | ".join(total_cells) + " |")
+
+    # Win rate
+    win_cells = ["**Win Rate**"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        if s and s.task_count > 0:
+            pct = int(s.win_count / s.task_count * 100)
+            win_cells.append(f"{pct}%")
+        else:
+            win_cells.append("-")
+    lines.append("| " + " | ".join(win_cells) + " |")
+
+    # Avg time
+    time_cells = ["**Avg Time**"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        time_cells.append(f"{s.avg_time:.1f}s" if s else "-")
+    lines.append("| " + " | ".join(time_cells) + " |")
+
+    # Total cost
+    cost_cells = ["**Total Cost**"]
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        if s and s.total_cost is not None:
+            cost_cells.append(f"${s.total_cost:.4f}")
+        else:
+            cost_cells.append("-")
+    lines.append("| " + " | ".join(cost_cells) + " |")
+
+    lines.append("")
+
+    # Task insights
+    if stats.task_stats:
+        lines.append("## Task Insights\n")
+        lines.append("| Task | Best Agent | Best Score | Avg Score | Fastest Agent |")
+        lines.append("|------|-----------|-----------|----------|--------------|")
+        for ts in stats.task_stats:
+            fastest = f"{ts.fastest_agent} ({ts.fastest_time:.0f}s)" if ts.fastest_agent else "-"
+            lines.append(
+                f"| {ts.task_name} | {ts.best_agent or '-'} | "
+                f"{ts.best_score:.1f} | {ts.avg_score:.1f} | {fastest} |"
+            )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def render_benchmark_html(
+    result: BenchmarkResult,
+    stats: BenchmarkStats,
+) -> str:
+    """Render a self-contained HTML report for the benchmark results."""
+    agents = result.agents
+    tasks = result.tasks
+    lookup = {(r.task_name, r.agent): r for r in result.results}
+    agent_stat_map = {s.agent: s for s in stats.agent_stats}
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    def esc(s: str) -> str:
+        return _html_mod.escape(str(s))
+
+    # Build task rows
+    task_rows = ""
+    for task_name in tasks:
+        task_rows += f"<tr><td class='task'>{esc(task_name)}</td>"
+        for agent in agents:
+            r = lookup.get((task_name, agent))
+            if r is None:
+                task_rows += "<td>-</td>"
+            elif r.error:
+                task_rows += "<td class='fail'>ERR</td>"
+            elif r.timed_out:
+                task_rows += "<td class='warn'>TIMEOUT</td>"
+            else:
+                cls = "pass" if r.score >= 50 else "fail"
+                task_rows += f"<td class='{cls}'>{r.score:.1f}<br><small>({r.wall_time:.0f}s)</small></td>"
+        task_rows += "</tr>\n"
+
+    # Summary rows
+    total_cells = ""
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        total_cells += f"<td><strong>{s.total_score:.1f}</strong></td>" if s else "<td>-</td>"
+
+    win_cells = ""
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        if s and s.task_count > 0:
+            pct = int(s.win_count / s.task_count * 100)
+            win_cells += f"<td>{pct}%</td>"
+        else:
+            win_cells += "<td>-</td>"
+
+    time_cells = ""
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        time_cells += f"<td>{s.avg_time:.1f}s</td>" if s else "<td>-</td>"
+
+    cost_cells = ""
+    for agent in agents:
+        s = agent_stat_map.get(agent)
+        if s and s.total_cost is not None:
+            cost_cells += f"<td>${s.total_cost:.4f}</td>"
+        else:
+            cost_cells += "<td>-</td>"
+
+    agent_headers = "".join(f"<th>{esc(a)}</th>" for a in agents)
+    winner = stats.agent_stats[0].agent if stats.agent_stats else "-"
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>coderace Benchmark — {esc(result.benchmark_id)}</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 2rem; }}
+  h1, h2 {{ color: #58a6ff; }}
+  .meta {{ color: #8b949e; font-size: 0.9rem; margin-bottom: 1.5rem; }}
+  .winner {{ background: #1f6feb33; border: 1px solid #1f6feb; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 2rem; }}
+  th {{ background: #161b22; color: #58a6ff; padding: 0.6rem 1rem; border: 1px solid #30363d; }}
+  td {{ padding: 0.5rem 1rem; border: 1px solid #30363d; text-align: center; }}
+  td.task {{ text-align: left; font-weight: 500; color: #e6edf3; }}
+  td.pass {{ color: #3fb950; }}
+  td.fail {{ color: #f85149; }}
+  td.warn {{ color: #d29922; }}
+  tr.summary td {{ background: #161b22; font-weight: bold; color: #e6edf3; }}
+  small {{ color: #8b949e; }}
+</style>
+</head>
+<body>
+<h1>coderace Benchmark</h1>
+<div class="meta">
+  ID: {esc(result.benchmark_id)} &nbsp;|&nbsp; Generated: {now}
+</div>
+<div class="winner">
+  <strong>Winner:</strong> {esc(winner)}
+</div>
+<h2>Results</h2>
+<table>
+<thead><tr><th>Task</th>{agent_headers}</tr></thead>
+<tbody>
+{task_rows}
+<tr class="summary"><td>TOTAL</td>{total_cells}</tr>
+<tr class="summary"><td>Win Rate</td>{win_cells}</tr>
+<tr class="summary"><td>Avg Time</td>{time_cells}</tr>
+<tr class="summary"><td>Total Cost</td>{cost_cells}</tr>
+</tbody>
+</table>
+</body>
+</html>
+"""
