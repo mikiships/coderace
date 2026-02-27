@@ -46,7 +46,7 @@ description: |
 
   Do NOT modify any other files.
 repo: .
-test_command: python -m pytest test_csv_analyzer.py -x -q
+test_command: python3 -m pytest test_csv_analyzer.py -x -q
 lint_command: ruff check csv_analyzer.py
 timeout: 300
 agents:

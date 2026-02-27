@@ -48,7 +48,7 @@ description: |
 
   Do NOT modify any other files.
 repo: .
-test_command: python -m pytest test_http_server.py -x -q
+test_command: python3 -m pytest test_http_server.py -x -q
 lint_command: ruff check http_server.py
 timeout: 600
 agents:

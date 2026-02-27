@@ -36,7 +36,7 @@ description: |
 
   Do NOT modify any other files.
 repo: .
-test_command: python -m pytest test_json_parser.py -x -q
+test_command: python3 -m pytest test_json_parser.py -x -q
 lint_command: ruff check json_parser.py
 timeout: 600
 agents:

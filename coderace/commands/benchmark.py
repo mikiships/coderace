@@ -15,8 +15,8 @@ console = Console()
 @app.callback(invoke_without_command=True)
 def benchmark_main(
     ctx: typer.Context,
-    agents: str = typer.Option(
-        ..., "--agents", "-a", help="Comma-separated list of agents (e.g. claude,codex)"
+    agents: Optional[str] = typer.Option(
+        None, "--agents", "-a", help="Comma-separated list of agents (e.g. claude,codex)"
     ),
     tasks: Optional[str] = typer.Option(
         None, "--tasks", "-t", help="Comma-separated task names (default: all built-ins)"
@@ -46,6 +46,10 @@ def benchmark_main(
     """Run all (or selected) built-in tasks against one or more agents and produce a comparison report."""
     if ctx.invoked_subcommand is not None:
         return
+
+    if not agents:
+        console.print("[red]--agents is required. Use --agents claude,codex[/red]")
+        raise typer.Exit(1)
 
     from coderace.benchmark import list_benchmark_tasks
 

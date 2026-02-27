@@ -24,7 +24,7 @@ description: |
 
   Do NOT modify any other files.
 repo: .
-test_command: python -m pytest test_fibonacci.py -x -q
+test_command: python3 -m pytest test_fibonacci.py -x -q
 lint_command: ruff check fibonacci.py
 timeout: 300
 agents:

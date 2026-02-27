@@ -99,6 +99,9 @@ def run_benchmark(
         tasks=list(tasks),
     )
 
+    # Track temp dirs for built-in tasks so we can clean up
+    _temp_dirs: list[Path] = []
+
     for task_name in tasks:
         try:
             task_path = get_builtin_path(task_name)
@@ -120,7 +123,22 @@ def run_benchmark(
                 ))
             continue
 
+        # Built-in tasks have repo=CWD which is wrong -- scaffold a temp git repo
         repo = task.repo
+        if task.repo == Path.cwd().resolve():
+            import shutil
+            import subprocess as _sp
+            tmp = Path(tempfile.mkdtemp(prefix=f"coderace-bench-{task_name}-"))
+            _temp_dirs.append(tmp)
+            _sp.run(["git", "init", str(tmp)], capture_output=True, check=True)
+            # Create an initial commit so branches can be created
+            _sp.run(
+                ["git", "commit", "--allow-empty", "-m", "initial"],
+                cwd=tmp, capture_output=True, check=True,
+            )
+            task.repo = tmp
+            repo = tmp
+
         if not repo.exists():
             for agent in agents:
                 result.results.append(TaskAgentResult(
@@ -176,6 +194,12 @@ def run_benchmark(
             )
 
     result.finish()
+
+    # Clean up temp directories for built-in tasks
+    import shutil as _shutil
+    for tmp_dir in _temp_dirs:
+        _shutil.rmtree(tmp_dir, ignore_errors=True)
+
     return result
 
 
@@ -214,6 +238,9 @@ def _run_single_agent(
 
     branch = branch_name_for(task_name, agent) + f"-bench"
     try:
+        # Delete stale branch from previous runs if it exists
+        import subprocess as _sp
+        _sp.run(["git", "branch", "-D", branch], cwd=repo, capture_output=True)
         create_branch(repo, branch, base_ref)
     except Exception as exc:
         if progress_callback:
@@ -342,6 +369,9 @@ def _run_task_parallel(
         worktree_dir = Path(tempfile.mkdtemp(prefix=f"coderace-bench-{agent}-"))
         branch = branch_name_for(task_name, agent) + "-bench"
         try:
+            # Delete stale branch from previous runs if it exists
+            import subprocess as _sp2
+            _sp2.run(["git", "branch", "-D", branch], cwd=repo, capture_output=True)
             create_branch(repo, branch, base_ref)
             checkout(repo, base_ref)
             add_worktree(repo, worktree_dir, branch)
