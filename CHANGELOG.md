@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0] - 2026-02-26
+
+### Added
+
+- **Built-in task library** — coderace ships with 6 curated benchmark tasks. Run `coderace run --builtin fibonacci` with zero setup. No YAML file needed.
+- **`coderace tasks list`** — List all available built-in tasks with descriptions.
+- **`coderace tasks show <name>`** — Print the full YAML of a built-in task.
+- **`--builtin` flag for `coderace run`** — Run a built-in task by name instead of providing a file path.
+- **6 benchmark tasks** — fibonacci (easy), json-parser (medium), markdown-to-html (medium), csv-analyzer (medium), http-server (medium-hard), binary-search-tree (hard).
+- **`coderace/builtins/`** — Python API: `list_builtins()`, `load_builtin()`, `get_builtin_path()` for programmatic access to built-in tasks.
+
 ## [0.6.0] - 2026-02-25
 
 ### Added

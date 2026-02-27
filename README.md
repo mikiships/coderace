@@ -15,7 +15,10 @@ pip install coderace
 ## Quick Start
 
 ```bash
-# Create a task template
+# Race agents on a built-in task (no setup required):
+coderace run --builtin fibonacci
+
+# Or create your own task:
 coderace init fix-auth-bug
 
 # Edit the task file (describe the bug, set test command)
@@ -115,6 +118,30 @@ Terminal table with Rich formatting:
 ```
 
 Results also saved as JSON in `.coderace/<task>-results.json` and as a self-contained HTML report in `.coderace/<task>-results.html`.
+
+## Built-in Tasks
+
+coderace ships with benchmark tasks you can run immediately — no YAML file needed:
+
+```bash
+# List available tasks
+coderace tasks list
+
+# Show a task's full YAML
+coderace tasks show fibonacci
+
+# Run a built-in task
+coderace run --builtin fibonacci
+```
+
+| Task | Difficulty | Description |
+|------|-----------|-------------|
+| `fibonacci` | Easy | Fibonacci with memoization + tests |
+| `json-parser` | Medium | JSON parser from scratch (no json module) |
+| `markdown-to-html` | Medium | Markdown subset to HTML converter |
+| `csv-analyzer` | Medium | CLI tool for CSV summary statistics |
+| `http-server` | Medium-Hard | HTTP/1.1 server using only stdlib socket |
+| `binary-search-tree` | Hard | AVL tree with insert, delete, search, and balancing |
 
 ## Try It Now
 
