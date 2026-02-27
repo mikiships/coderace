@@ -86,6 +86,9 @@ def save_results_json(scores: list[Score], output_path: Path) -> None:
                     else None
                 ),
                 "tests_output": score.tests_output,
+                "verify_passed": score.verify_passed,
+                "verify_score": score.verify_score,
+                "verify_output": score.verify_output,
                 "lint_output": score.lint_output,
                 "diff_stat": score.diff_stat,
             }

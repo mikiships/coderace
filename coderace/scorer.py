@@ -27,6 +27,29 @@ def run_command(cmd: str, cwd: Path, timeout: int = 120) -> tuple[int, str]:
         return -1, str(e)
 
 
+def _resolve_workspace_path(workdir: Path, rel_path: str) -> Path:
+    """Resolve a verify file path and ensure it stays within the workspace."""
+    file_path = Path(rel_path)
+    if file_path.is_absolute():
+        raise ValueError(f"verify_files path must be relative: {rel_path!r}")
+
+    resolved = (workdir / file_path).resolve()
+    workspace_root = workdir.resolve()
+    try:
+        resolved.relative_to(workspace_root)
+    except ValueError as exc:
+        raise ValueError(f"verify_files path escapes workspace: {rel_path!r}") from exc
+    return resolved
+
+
+def _write_verify_files(workdir: Path, verify_files: dict[str, str]) -> None:
+    """Write verification files into the workspace, overwriting existing files."""
+    for rel_path, content in verify_files.items():
+        target = _resolve_workspace_path(workdir, rel_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+
+
 def compute_score(
     result: AgentResult,
     test_command: str,
@@ -36,6 +59,8 @@ def compute_score(
     all_wall_times: list[float],
     all_diff_lines: list[int],
     weights: dict[str, float] | None = None,
+    verify_command: str | None = None,
+    verify_files: dict[str, str] | None = None,
 ) -> Score:
     """Compute a composite score for an agent result."""
     breakdown = ScoreBreakdown()
@@ -43,6 +68,20 @@ def compute_score(
     # Tests
     test_exit, test_output = run_command(test_command, workdir)
     breakdown.tests_pass = test_exit == 0
+
+    verify_passed = False
+    verify_score = 0.0
+    verify_output = ""
+    if verify_command and verify_files is not None:
+        try:
+            _write_verify_files(workdir, verify_files)
+            verify_exit, verify_output = run_command(verify_command, workdir)
+            verify_passed = verify_exit == 0
+            verify_score = 100.0 if verify_passed else 0.0
+        except Exception as exc:
+            verify_output = f"Failed to run verification tests: {exc}"
+            verify_passed = False
+            verify_score = 0.0
 
     # Exit clean
     breakdown.exit_clean = result.exit_code == 0 and not result.timed_out
@@ -85,6 +124,9 @@ def compute_score(
         composite=round(composite, 1),
         breakdown=breakdown,
         tests_output=test_output,
+        verify_passed=verify_passed,
+        verify_score=verify_score,
+        verify_output=verify_output,
         lint_output=lint_output,
         cost_result=result.cost_result,
     )

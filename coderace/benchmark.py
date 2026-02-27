@@ -272,6 +272,8 @@ def _run_single_agent(
             all_wall_times=[agent_result.wall_time],
             all_diff_lines=[lines],
             weights=task.get_weights(),
+            verify_command=task.verify_command,
+            verify_files=task.verify_files,
         )
         checkout(repo, base_ref)
 
@@ -392,6 +394,8 @@ def _run_task_parallel(
                 all_wall_times=[agent_result.wall_time],
                 all_diff_lines=[lines],
                 weights=task.get_weights(),
+                verify_command=task.verify_command,
+                verify_files=task.verify_files,
             )
 
             cost_usd = None

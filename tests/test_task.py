@@ -81,3 +81,38 @@ def test_task_validate_no_agents() -> None:
     task = Task(name="t", description="d", repo=Path("."), test_command="echo", agents=[])
     errors = task.validate()
     assert any("agent" in e.lower() for e in errors)
+
+
+def test_load_task_with_verification_fields(tmp_path: Path) -> None:
+    path = tmp_path / "task.yaml"
+    path.write_text("""name: t
+description: d
+test_command: echo ok
+verify_command: python3 -m pytest verify_tests.py -x -q
+verify_files:
+  verify_tests.py: |
+    def test_ok():
+      assert True
+agents:
+  - claude
+""")
+    task = load_task(path)
+    assert task.verify_command == "python3 -m pytest verify_tests.py -x -q"
+    assert task.verify_files == {
+        "verify_tests.py": "def test_ok():\n  assert True\n"
+    }
+
+
+def test_load_task_rejects_non_mapping_verify_files(tmp_path: Path) -> None:
+    path = tmp_path / "task.yaml"
+    path.write_text("""name: t
+description: d
+test_command: echo ok
+verify_command: echo ok
+verify_files:
+  - bad
+agents:
+  - claude
+""")
+    with pytest.raises(ValueError, match="verify_files must be a mapping"):
+        load_task(path)

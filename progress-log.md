@@ -76,3 +76,45 @@
 ### Build Status: COMPLETE
 
 All deliverables checked. All tests passing. Committed after each deliverable.
+
+---
+
+## Date: 2026-02-27 (Verification Tests Contract)
+
+### D1: Verification Test Runner (core engine) ✅
+
+**Built:**
+- `coderace/types.py`
+  - Added task fields: `verify_command`, `verify_files`
+  - Added score fields: `verify_passed`, `verify_score`, `verify_output`
+  - Added validation for `verify_command` and `verify_files` path/content shape
+- `coderace/task.py`
+  - Parse `verify_command` and `verify_files` from YAML with type validation
+  - Included verification fields in task template comments
+- `coderace/scorer.py`
+  - Added verification file writer that writes into workspace and overwrites existing files
+  - Added safe path resolution to block verify file paths escaping workspace
+  - Runs verification command after `test_command` when `verify_command` and `verify_files` are present
+  - Captures verification pass/fail/output and stores `verify_score` (100/0)
+- `coderace/cli.py` and `coderace/benchmark.py`
+  - Pass task verification settings into `compute_score(...)`
+- `coderace/reporter.py`
+  - Persist `verify_passed`, `verify_score`, `verify_output` in JSON results payload
+
+**Tests:**
+- Added D1 coverage:
+  - `tests/test_task.py`: verification YAML parsing + invalid `verify_files` shape
+  - `tests/test_scorer.py`: verify file overwrite behavior, verify command pass/fail output capture, skip behavior when `verify_files` absent, workspace-escape path rejection
+- Validation run:
+  - `./.venv/bin/pytest -q tests/test_task.py tests/test_scorer.py`
+  - `./.venv/bin/pytest -q`
+- Current suite status: **398 passed**
+
+**Commit:**
+- Blocked in this execution environment: `git commit` failed with permission error creating `.git/index.lock`.
+
+**Next:**
+- D2 Scoring Engine Update: add `verify` metric weighting and verify-aware default distribution with backward compatibility.
+
+**Blockers:**
+- Environment restriction on writing `.git/index.lock` prevents committing from this session.

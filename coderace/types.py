@@ -64,6 +64,8 @@ class Task:
     test_command: str
     agents: list[str]
     lint_command: str | None = None
+    verify_command: str | None = None
+    verify_files: dict[str, str] | None = None
     timeout: int = 300
     scoring: dict[str, float] | None = None
     # Per-agent or per-model pricing overrides: name -> (input_usd_per_1m, output_usd_per_1m)
@@ -78,6 +80,19 @@ class Task:
             errors.append("Task description is required")
         if not self.test_command:
             errors.append("test_command is required")
+        if self.verify_command is not None and not self.verify_command.strip():
+            errors.append("verify_command must not be empty")
+        if self.verify_files is not None:
+            for rel_path, content in self.verify_files.items():
+                if not isinstance(rel_path, str) or not rel_path:
+                    errors.append("verify_files keys must be non-empty strings")
+                    break
+                if Path(rel_path).is_absolute():
+                    errors.append(f"verify_files path must be relative: {rel_path!r}")
+                    break
+                if not isinstance(content, str):
+                    errors.append(f"verify_files[{rel_path!r}] content must be a string")
+                    break
         if not self.agents:
             errors.append("At least one agent is required")
         known = {"claude", "codex", "aider", "gemini", "opencode"}
@@ -132,6 +147,9 @@ class Score:
     composite: float
     breakdown: ScoreBreakdown = field(default_factory=ScoreBreakdown)
     tests_output: str = ""
+    verify_passed: bool = False
+    verify_score: float = 0.0
+    verify_output: str = ""
     lint_output: str = ""
     diff_stat: str = ""
     cost_result: Optional[CostResult] = None

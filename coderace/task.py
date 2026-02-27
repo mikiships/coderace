@@ -38,6 +38,31 @@ def load_task(path: str | Path) -> Task:
     if scoring_raw is not None and not isinstance(scoring_raw, dict):
         raise ValueError(f"scoring must be a mapping, got {type(scoring_raw).__name__}")
 
+    verify_command_raw = data.get("verify_command")
+    if verify_command_raw is not None and not isinstance(verify_command_raw, str):
+        raise ValueError(
+            f"verify_command must be a string, got {type(verify_command_raw).__name__}"
+        )
+
+    verify_files_raw = data.get("verify_files")
+    verify_files: dict[str, str] | None = None
+    if verify_files_raw is not None:
+        if not isinstance(verify_files_raw, dict):
+            raise ValueError(
+                f"verify_files must be a mapping, got {type(verify_files_raw).__name__}"
+            )
+        verify_files = {}
+        for filename, content in verify_files_raw.items():
+            if not isinstance(filename, str):
+                raise ValueError(
+                    f"verify_files keys must be strings, got {type(filename).__name__}"
+                )
+            if not isinstance(content, str):
+                raise ValueError(
+                    f"verify_files[{filename!r}] must be a string, got {type(content).__name__}"
+                )
+            verify_files[filename] = content
+
     pricing_raw = data.get("pricing")
     pricing: dict[str, tuple[float, float]] | None = None
     if pricing_raw is not None:
@@ -68,6 +93,8 @@ def load_task(path: str | Path) -> Task:
         test_command=data["test_command"],
         agents=data["agents"],
         lint_command=data.get("lint_command"),
+        verify_command=verify_command_raw,
+        verify_files=verify_files,
         timeout=data.get("timeout", 300),
         scoring=scoring_raw,
         pricing=pricing,
@@ -105,6 +132,12 @@ agents:
 #   lint: 15
 #   time: 15
 #   lines: 10
+# Optional: verification test suite (written into workspace after test_command)
+# verify_command: python3 -m pytest verify_tests.py -x -q
+# verify_files:
+#   verify_tests.py: |
+#     def test_placeholder():
+#       assert True
 # Optional: override pricing for cost tracking (USD per 1M tokens)
 # Use agent name or model name as key.
 # pricing:

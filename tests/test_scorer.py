@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from coderace.scorer import _normalize_lower_better
-from coderace.types import DEFAULT_WEIGHTS, normalize_weights
+from coderace.scorer import compute_score, _normalize_lower_better
+from coderace.types import DEFAULT_WEIGHTS, AgentResult, normalize_weights
 
 
 def test_weights_sum_to_one() -> None:
@@ -78,3 +81,109 @@ def test_normalize_empty_list() -> None:
 def test_normalize_zero_value() -> None:
     score = _normalize_lower_better(0.0, [0.0, 5.0])
     assert score == 50.0  # zero treated as invalid
+
+
+def _agent_result() -> AgentResult:
+    return AgentResult(
+        agent="claude",
+        exit_code=0,
+        stdout="",
+        stderr="",
+        wall_time=1.0,
+    )
+
+
+def _write_verify_checker(tmp_path: Path) -> Path:
+    path = tmp_path / "verify_check.py"
+    path.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "expected = sys.argv[1]\n"
+        "actual = Path('target.txt').read_text().strip()\n"
+        "print(actual)\n"
+        "raise SystemExit(0 if actual == expected else 1)\n"
+    )
+    return path
+
+
+def test_compute_score_runs_verification_after_tests(tmp_path: Path) -> None:
+    test_setup = tmp_path / "test_setup.py"
+    test_setup.write_text(
+        "from pathlib import Path\n"
+        "Path('target.txt').write_text('from-tests\\n')\n"
+    )
+    verify_script = _write_verify_checker(tmp_path)
+
+    score = compute_score(
+        result=_agent_result(),
+        test_command=f"{sys.executable} {test_setup.name}",
+        lint_command=None,
+        workdir=tmp_path,
+        diff_lines=1,
+        all_wall_times=[1.0],
+        all_diff_lines=[1],
+        verify_command=f"{sys.executable} {verify_script.name} from-verify",
+        verify_files={"target.txt": "from-verify\n"},
+    )
+
+    assert score.breakdown.tests_pass is True
+    assert score.verify_passed is True
+    assert score.verify_score == 100.0
+    assert "from-verify" in score.verify_output
+    assert (tmp_path / "target.txt").read_text() == "from-verify\n"
+
+
+def test_compute_score_captures_verify_failure_output(tmp_path: Path) -> None:
+    verify_script = _write_verify_checker(tmp_path)
+
+    score = compute_score(
+        result=_agent_result(),
+        test_command="echo ok",
+        lint_command=None,
+        workdir=tmp_path,
+        diff_lines=1,
+        all_wall_times=[1.0],
+        all_diff_lines=[1],
+        verify_command=f"{sys.executable} {verify_script.name} from-verify",
+        verify_files={"target.txt": "wrong\n"},
+    )
+
+    assert score.verify_passed is False
+    assert score.verify_score == 0.0
+    assert "wrong" in score.verify_output
+
+
+def test_compute_score_skips_verify_without_verify_files(tmp_path: Path) -> None:
+    score = compute_score(
+        result=_agent_result(),
+        test_command="echo ok",
+        lint_command=None,
+        workdir=tmp_path,
+        diff_lines=1,
+        all_wall_times=[1.0],
+        all_diff_lines=[1],
+        verify_command=f"{sys.executable} -c \"import sys; raise SystemExit(1)\"",
+        verify_files=None,
+    )
+
+    assert score.verify_passed is False
+    assert score.verify_score == 0.0
+    assert score.verify_output == ""
+
+
+def test_compute_score_rejects_verify_files_outside_workspace(tmp_path: Path) -> None:
+    score = compute_score(
+        result=_agent_result(),
+        test_command="echo ok",
+        lint_command=None,
+        workdir=tmp_path,
+        diff_lines=1,
+        all_wall_times=[1.0],
+        all_diff_lines=[1],
+        verify_command="echo should-not-run",
+        verify_files={"../outside.txt": "x"},
+    )
+
+    assert score.verify_passed is False
+    assert score.verify_score == 0.0
+    assert "escapes workspace" in score.verify_output
