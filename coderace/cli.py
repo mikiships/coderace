@@ -25,11 +25,14 @@ from coderace.scorer import compute_score
 from coderace.task import create_template, load_task
 from coderace.types import AgentResult, Score
 
+from coderace.commands.tasks import app as tasks_app
+
 app = typer.Typer(
     name="coderace",
     help="Race coding agents against each other on real tasks.",
     no_args_is_help=True,
 )
+app.add_typer(tasks_app, name="tasks")
 console = Console()
 
 
@@ -108,7 +111,7 @@ def _run_agent_worktree(
 
 @app.command()
 def run(
-    task_file: Path = typer.Argument(help="Path to task YAML file"),
+    task_file: Path = typer.Argument(None, help="Path to task YAML file"),
     agents: list[str] | None = typer.Option(
         None, "--agent", "-a", help="Override agent list"
     ),
@@ -124,8 +127,27 @@ def run(
     no_save: bool = typer.Option(
         False, "--no-save", help="Skip saving results to the local database"
     ),
+    builtin: str | None = typer.Option(
+        None, "--builtin", help="Use a built-in task instead of a file"
+    ),
 ) -> None:
     """Run all agents on a task and score the results."""
+    if builtin and task_file:
+        console.print("[red]Cannot use both --builtin and a task file path.[/red]")
+        raise typer.Exit(1)
+
+    if builtin:
+        from coderace.builtins import get_builtin_path
+
+        try:
+            task_file = get_builtin_path(builtin)
+        except FileNotFoundError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+    elif task_file is None:
+        console.print("[red]Provide a task file path or use --builtin <name>.[/red]")
+        raise typer.Exit(1)
+
     task = load_task(task_file)
 
     if runs < 1:
