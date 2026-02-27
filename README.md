@@ -516,3 +516,71 @@ The action uses a hidden HTML marker to find and update existing comments, so re
 ## License
 
 MIT
+
+## Benchmarking
+
+The `coderace benchmark` command runs all (or selected) built-in tasks against one or more agents and produces a comprehensive comparison report.
+
+```bash
+# Race claude vs codex across ALL built-in tasks
+coderace benchmark --agents claude,codex
+
+# Select specific tasks
+coderace benchmark --agents claude,codex --tasks fibonacci,json-parser
+
+# Filter by difficulty
+coderace benchmark --agents claude --difficulty easy,medium
+
+# Dry-run: see what would run without executing
+coderace benchmark --agents claude,codex --dry-run
+
+# Save report to file
+coderace benchmark --agents claude,codex --output report.md
+coderace benchmark --agents claude,codex --output report.html
+```
+
+### Example Terminal Output
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+┃ Task                 ┃ claude         ┃ codex          ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+│ fibonacci            │ 100.0 (3s)     │ 95.0 (5s)      │
+│ json-parser          │ 85.0 (12s)     │ 100.0 (9s)     │
+│ csv-analyzer         │ 70.0 (18s)     │ 65.0 (22s)     │
+│ markdown-to-html     │ 90.0 (8s)      │ 85.0 (11s)     │
+│ binary-search-tree   │ 80.0 (25s)     │ 75.0 (30s)     │
+│ http-server          │ 55.0 (45s)     │ 60.0 (40s)     │
+├──────────────────────┼────────────────┼────────────────┤
+│ TOTAL                │ 480.0          │ 480.0          │
+│ Win Rate             │ 50%            │ 50%            │
+│ Avg Time             │ 18.5s          │ 19.5s          │
+│ Total Cost           │ $0.12          │ $0.09          │
+└──────────────────────┴────────────────┴────────────────┘
+```
+
+### Benchmark History
+
+Results are saved to the local store automatically:
+
+```bash
+# List past benchmark runs
+coderace benchmark history
+
+# View a specific past benchmark
+coderace benchmark show bench-20260227-143022
+```
+
+### Benchmark CLI Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--agents` | Comma-separated agent names (required) | — |
+| `--tasks` | Comma-separated task names | all built-ins |
+| `--difficulty` | Filter by difficulty: `easy`, `medium`, `hard` | all |
+| `--timeout` | Per-task timeout in seconds | `300` |
+| `--parallel N` | Run N agents in parallel | `1` (sequential) |
+| `--dry-run` | List combinations without running | `false` |
+| `--format` | Output format: `terminal`, `markdown`, `html` | `terminal` |
+| `--output` | Save report to file | — |
+| `--no-save` | Skip saving results to the store | `false` |
