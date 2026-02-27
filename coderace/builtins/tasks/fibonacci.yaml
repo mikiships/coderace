@@ -1,0 +1,41 @@
+name: fibonacci
+description: |
+  Implement a fibonacci module with memoization and comprehensive tests.
+
+  Create a file called `fibonacci.py` with the following functions:
+
+  1. `fibonacci(n: int) -> int`
+     - Return the nth Fibonacci number (0-indexed: fib(0)=0, fib(1)=1, fib(2)=1, ...)
+     - Must use memoization for O(n) performance
+     - Raise ValueError for negative inputs
+
+  2. `fibonacci_sequence(n: int) -> list[int]`
+     - Return the first n Fibonacci numbers as a list
+     - fibonacci_sequence(0) returns []
+     - fibonacci_sequence(1) returns [0]
+     - fibonacci_sequence(6) returns [0, 1, 1, 2, 3, 5]
+
+  Create a file called `test_fibonacci.py` with tests covering:
+  - Base cases: fib(0)=0, fib(1)=1
+  - Known values: fib(10)=55, fib(20)=6765
+  - Negative input raises ValueError
+  - fibonacci_sequence for various lengths
+  - Large values (fib(100)) to verify memoization works
+
+  Do NOT modify any other files.
+repo: .
+test_command: python -m pytest test_fibonacci.py -x -q
+lint_command: ruff check fibonacci.py
+timeout: 300
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 50
+  exit: 20
+  lint: 15
+  time: 10
+  lines: 5
