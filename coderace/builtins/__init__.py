@@ -21,6 +21,11 @@ def list_builtins() -> list[str]:
     return sorted(p.stem for p in tasks_dir.glob("*.yaml"))
 
 
+def list_builtin_tasks() -> list[str]:
+    """Backward-compatible alias for listing built-in task names."""
+    return list_builtins()
+
+
 def load_builtin(name: str) -> dict:
     """Load a built-in task by name and return its parsed YAML as a dict."""
     path = get_builtin_path(name)

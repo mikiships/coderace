@@ -1,0 +1,106 @@
+name: data-pipeline
+difficulty: hard
+description: |
+  Build a composable, lazy data pipeline in `pipeline.py`.
+
+  Implement `class Pipeline` with this API:
+
+  - `__init__(iterable=None)`
+  - `map(fn)`
+  - `filter(fn)`
+  - `reduce(fn, initial)`
+  - `sort(key=None)`
+  - `take(n)`
+  - `skip(n)`
+  - `batch(size)`
+  - `collect()`
+  - `first(default=None)`
+  - `__or__(other)` for composition
+
+  Requirements:
+  - Operations are lazy: no data processing should happen until `collect()` or
+    `first()` is called.
+  - Every transformation method returns a new `Pipeline` (do not mutate the
+    existing one).
+  - `batch(size)` groups results into lists of length `size` (last batch may be
+    shorter).
+  - `reduce(fn, initial)` should be lazy and produce a pipeline containing one
+    reduced value when collected.
+  - Composition with `pipe1 | pipe2` combines operations from both pipelines.
+    The composed pipeline must use `pipe1` as the data source.
+
+  Create your own `test_pipeline.py` and ensure it passes.
+  Do NOT modify files other than `pipeline.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_pipeline.py -x -q
+verify_command: python3 -m pytest verify_pipeline.py -x -q
+verify_files:
+  verify_pipeline.py: |
+    from pipeline import Pipeline
+
+
+    def test_lazy_execution_until_collect() -> None:
+        seen: list[int] = []
+
+        def track(x: int) -> int:
+            seen.append(x)
+            return x * 2
+
+        pipe = Pipeline(range(5)).map(track).filter(lambda x: x > 2)
+        assert seen == []
+
+        out = pipe.collect()
+        assert out == [4, 6, 8]
+        assert seen == [0, 1, 2, 3, 4]
+
+
+    def test_chained_transformations_batch_skip_take() -> None:
+        out = (
+            Pipeline(range(20))
+            .skip(2)
+            .take(10)
+            .filter(lambda x: x % 2 == 0)
+            .map(lambda x: x * 3)
+            .batch(2)
+            .collect()
+        )
+        assert out == [[6, 12], [18, 24], [30]]
+
+
+    def test_sort_and_reduce_are_supported() -> None:
+        records = [{"name": "c", "score": 3}, {"name": "a", "score": 1}, {"name": "b", "score": 2}]
+
+        sorted_names = Pipeline(records).sort(key=lambda row: row["score"]).map(lambda row: row["name"]).collect()
+        assert sorted_names == ["a", "b", "c"]
+
+        reduced = Pipeline([1, 2, 3, 4]).reduce(lambda acc, x: acc + x, 0).collect()
+        assert reduced == [10]
+
+
+    def test_first_returns_first_item_after_pipeline_ops() -> None:
+        first = Pipeline(range(100)).skip(10).filter(lambda x: x % 7 == 0).first()
+        assert first == 14
+        assert Pipeline([]).first(default="empty") == "empty"
+
+
+    def test_pipeline_composition_operator() -> None:
+        left = Pipeline(range(8)).map(lambda x: x + 1)
+        right = Pipeline([]).filter(lambda x: x % 2 == 0).map(lambda x: x * 10)
+
+        combined = left | right
+        assert combined.collect() == [20, 40, 60, 80]
+lint_command: ruff check pipeline.py
+timeout: 900
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

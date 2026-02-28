@@ -25,6 +25,56 @@ description: |
   Do NOT modify any other files.
 repo: .
 test_command: python3 -m pytest test_fibonacci.py -x -q
+verify_command: python3 -m pytest verify_fibonacci.py -x -q
+verify_files:
+  verify_fibonacci.py: |
+    import time
+
+    import pytest
+
+    from fibonacci import fibonacci, fibonacci_sequence
+
+
+    @pytest.mark.parametrize(
+        ("n", "expected"),
+        [
+            (50, 12586269025),
+            (100, 354224848179261915075),
+        ],
+    )
+    def test_large_fibonacci_values_are_exact(n: int, expected: int) -> None:
+        result = fibonacci(n)
+        assert result == expected
+        assert isinstance(result, int)
+
+
+    def test_edge_cases_zero_and_one() -> None:
+        assert fibonacci(0) == 0
+        assert fibonacci(1) == 1
+
+
+    def test_fib_100_is_fast_enough() -> None:
+        start = time.perf_counter()
+        value = fibonacci(100)
+        elapsed = time.perf_counter() - start
+        assert value == 354224848179261915075
+        assert elapsed < 1.0, f"fibonacci(100) took {elapsed:.3f}s"
+
+
+    def test_repeated_large_calls_remain_fast() -> None:
+        start = time.perf_counter()
+        for _ in range(200):
+            assert fibonacci(100) == 354224848179261915075
+        elapsed = time.perf_counter() - start
+        assert elapsed < 1.0, f"200 repeated fibonacci(100) calls took {elapsed:.3f}s"
+
+
+    def test_fibonacci_sequence_returns_list_not_generator() -> None:
+        seq = fibonacci_sequence(10)
+        assert isinstance(seq, list)
+        assert not hasattr(seq, "__next__")
+        assert seq == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+        assert all(isinstance(value, int) for value in seq)
 lint_command: ruff check fibonacci.py
 timeout: 300
 agents:
@@ -34,8 +84,9 @@ agents:
   - aider
   - opencode
 scoring:
-  tests: 50
+  tests: 25
+  verify: 30
   exit: 20
   lint: 15
-  time: 10
+  time: 5
   lines: 5

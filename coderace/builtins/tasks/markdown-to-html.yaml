@@ -34,6 +34,35 @@ description: |
   Do NOT modify any other files.
 repo: .
 test_command: python3 -m pytest test_md2html.py -x -q
+verify_command: python3 -m pytest verify_md2html.py -x -q
+verify_files:
+  verify_md2html.py: |
+    from md2html import markdown_to_html
+
+
+    def test_empty_and_whitespace_input_returns_empty() -> None:
+        assert markdown_to_html("") == ""
+        assert markdown_to_html("   \\n\\t\\n  ") == ""
+
+
+    def test_nested_bold_and_italic_formatting() -> None:
+        html = markdown_to_html("**bold *and italic***")
+        assert html == "<p><strong>bold <em>and italic</em></strong></p>"
+
+
+    def test_nested_inline_elements_inside_paragraph() -> None:
+        html = markdown_to_html("Use **bold and `code`** together.")
+        assert html == "<p>Use <strong>bold and <code>code</code></strong> together.</p>"
+
+
+    def test_html_entities_are_escaped_in_text() -> None:
+        html = markdown_to_html("5 < 6 & 7 > 3")
+        assert html == "<p>5 &lt; 6 &amp; 7 &gt; 3</p>"
+
+
+    def test_html_entities_are_escaped_inside_code() -> None:
+        html = markdown_to_html("`x < y && y > z`")
+        assert html == "<p><code>x &lt; y &amp;&amp; y &gt; z</code></p>"
 lint_command: ruff check md2html.py
 timeout: 600
 agents:
@@ -43,8 +72,9 @@ agents:
   - aider
   - opencode
 scoring:
-  tests: 50
+  tests: 25
+  verify: 30
   exit: 20
   lint: 15
-  time: 10
+  time: 5
   lines: 5

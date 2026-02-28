@@ -254,3 +254,191 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 - D1 was already complete on branch (`560328b`)
 - Full test suite status after all changes: **411 passed**
 - Remaining blocker: this execution environment still cannot write under `.git/`, so per-deliverable commits could not be created from this session.
+
+---
+
+## Date: 2026-02-28 (v0.9.0 Verification + New Tasks Contract)
+
+### D1: Fibonacci Verification Suite ✅
+
+**Built:**
+- Updated `coderace/builtins/tasks/fibonacci.yaml` with `verify_command` and embedded `verify_files`.
+- Added `verify_fibonacci.py` coverage for `fib(50)` and `fib(100)` exact values, `int` return types, explicit `fib(0)`/`fib(1)` edge cases, performance checks, and `fibonacci_sequence` list typing.
+- Updated scoring weights to include verification scoring.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D2 (`json-parser.yaml`) verification suite.
+
+**Blockers:**
+- `uv run` panics in this sandbox unless `--offline --no-sync` is used.
+
+### D2: JSON Parser Verification Suite ✅
+
+**Built:**
+- Updated `coderace/builtins/tasks/json-parser.yaml` with `verify_command` and embedded `verify_files`.
+- Added `verify_json_parser.py` coverage for malformed JSON variants, deeply nested arrays, nested mixed structures, and unicode handling (literal + `\\u` escape decoding).
+- Updated scoring weights to include verification scoring.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D3 (`csv-analyzer.yaml`) verification suite.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D3: CSV Analyzer Verification Suite ✅
+
+**Built:**
+- Updated `coderace/builtins/tasks/csv-analyzer.yaml` with `verify_command` and embedded `verify_files`.
+- Added `verify_csv_analyzer.py` subprocess-based verification for header-only CSVs, quoted fields containing commas/newlines, and large dataset numeric/text aggregation.
+- Updated scoring weights to include verification scoring.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D4 (`markdown-to-html.yaml`) verification suite.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D4: Markdown-to-HTML Verification Suite ✅
+
+**Built:**
+- Updated `coderace/builtins/tasks/markdown-to-html.yaml` with `verify_command` and embedded `verify_files`.
+- Added `verify_md2html.py` verification for nested formatting, whitespace-only input behavior, and HTML entity escaping in text/code contexts.
+- Updated scoring weights to include verification scoring.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D5 (`http-server.yaml`) verification suite.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D5: HTTP Server Verification Suite ✅
+
+**Built:**
+- Updated `coderace/builtins/tasks/http-server.yaml` with `verify_command` and embedded `verify_files`.
+- Added `verify_http_server.py` verification for concurrent request handling, required response headers, 404/405 error responses, and extension-based content-type mapping.
+- Updated scoring weights to include verification scoring.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D6 (`binary-search-tree.yaml`) verification suite.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D6: Binary Search Tree Verification Suite ✅
+
+**Built:**
+- Updated `coderace/builtins/tasks/binary-search-tree.yaml` with `verify_command` and embedded `verify_files`.
+- Added `verify_bst.py` verification for AVL invariants, large sequential insert balancing, deletion edge cases (leaf/one-child/two-children), and repeated root deletion rebalancing.
+- Updated scoring weights to include verification scoring.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D7 (`file-watcher.yaml`) new built-in task with verification.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D7: New Built-in Task `file-watcher` ✅
+
+**Built:**
+- Added `coderace/builtins/tasks/file-watcher.yaml` with full medium-difficulty task spec and embedded verification tests.
+- Verification suite (`verify_file_watcher.py`) covers nested directory scanning, MD5 metadata, and `added`/`modified`/`deleted` diff behavior.
+- Added `list_builtin_tasks()` alias in `coderace/builtins/__init__.py` so loader validation command works.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+- Loader check:
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -c "from coderace.builtins import list_builtin_tasks; print(list_builtin_tasks())"`
+  - Includes `file-watcher`.
+
+**Next:**
+- D8 (`cli-args-parser.yaml`) new built-in task with verification.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D8: New Built-in Task `cli-args-parser` ✅
+
+**Built:**
+- Added `coderace/builtins/tasks/cli-args-parser.yaml` with full medium-difficulty task spec and embedded verification tests.
+- Verification suite (`verify_cli_parser.py`) covers positional args, `--key=value` and `--key value`, short/bundled flags, `--no-flag` negation, attribute normalization, and error clarity.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D9 (`data-pipeline.yaml`) new built-in task with verification.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D9: New Built-in Task `data-pipeline` ✅
+
+**Built:**
+- Added `coderace/builtins/tasks/data-pipeline.yaml` with full hard-difficulty task spec and embedded verification tests.
+- Verification suite (`verify_pipeline.py`) covers lazy execution, chained map/filter/sort/skip/take/batch behavior, lazy reduce semantics, `first()`, and `pipe1 | pipe2` composition.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- D10 (`state-machine.yaml`) new built-in task with verification.
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### D10: New Built-in Task `state-machine` ✅
+
+**Built:**
+- Added `coderace/builtins/tasks/state-machine.yaml` with full medium-hard task spec and embedded verification tests.
+- Verification suite (`verify_state_machine.py`) covers guarded transitions, invalid transitions, transition ordering, and state hook/action callback behavior.
+
+**Tests:**
+- `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q`
+- Result: **411 passed**
+
+**Next:**
+- Final contract validation checks (task loader output + verify coverage/count validation).
+
+**Blockers:**
+- Git commit is blocked by sandbox permissions (`.git/index.lock` cannot be created).
+
+### v0.9.0 Contract Final Summary
+
+**Deliverables Completed:**
+- D1 through D10 completed in sequence.
+
+**Validation Gates:**
+- Full suite: `UV_CACHE_DIR=/tmp/uv-cache uv run --offline --no-sync python -m pytest tests/ -q` -> **411 passed**.
+- Loader command: `from coderace.builtins import list_builtin_tasks` succeeds and lists built-ins.
+- Built-in count: **16**.
+- Verification coverage: all 16 built-ins include both `verify_command` and `verify_files`.
+
+**Blockers:**
+- Per-deliverable commits could not be created because this sandbox denies writes under `.git/` (`.git/index.lock: Operation not permitted`).

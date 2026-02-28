@@ -56,6 +56,78 @@ description: |
   Do NOT modify any other files.
 repo: .
 test_command: python3 -m pytest test_bst.py -x -q
+verify_command: python3 -m pytest verify_bst.py -x -q
+verify_files:
+  verify_bst.py: |
+    import math
+
+    from bst import AVLTree
+
+
+    def _height(node) -> int:
+        if node is None:
+            return 0
+        return max(_height(node.left), _height(node.right)) + 1
+
+
+    def _assert_avl_invariants(node) -> int:
+        if node is None:
+            return 0
+        left_h = _assert_avl_invariants(node.left)
+        right_h = _assert_avl_invariants(node.right)
+        assert abs(left_h - right_h) <= 1
+        if hasattr(node, "height"):
+            assert node.height == max(left_h, right_h) + 1
+        return max(left_h, right_h) + 1
+
+
+    def test_large_sequential_inserts_stay_balanced() -> None:
+        tree = AVLTree()
+        n = 2000
+        for i in range(1, n + 1):
+            tree.insert(i, i)
+
+        assert len(tree) == n
+        assert tree.in_order() == list(range(1, n + 1))
+
+        height = _assert_avl_invariants(tree.root)
+        # Practical AVL upper bound.
+        assert height <= math.ceil(1.45 * math.log2(n + 2)) + 1
+
+
+    def test_deletion_edge_cases_and_rebalancing() -> None:
+        tree = AVLTree()
+        keys = [50, 30, 70, 20, 40, 60, 80, 65, 75]
+        for key in keys:
+            tree.insert(key, str(key))
+
+        # Leaf delete.
+        assert tree.delete(20) is True
+        # Node with one child.
+        assert tree.delete(60) is True
+        # Node with two children.
+        assert tree.delete(70) is True
+        # Missing node.
+        assert tree.delete(999) is False
+
+        expected = sorted(set(keys) - {20, 60, 70})
+        assert tree.in_order() == expected
+        assert len(tree) == len(expected)
+        _assert_avl_invariants(tree.root)
+
+
+    def test_repeated_root_deletes_keep_tree_valid() -> None:
+        tree = AVLTree()
+        for i in range(1, 128):
+            tree.insert(i, i)
+
+        for _ in range(40):
+            root_key = tree.root.key
+            assert tree.delete(root_key) is True
+            _assert_avl_invariants(tree.root)
+
+        remaining = tree.in_order()
+        assert remaining == sorted(remaining)
 lint_command: ruff check bst.py
 timeout: 600
 agents:
@@ -65,8 +137,9 @@ agents:
   - aider
   - opencode
 scoring:
-  tests: 50
+  tests: 25
+  verify: 30
   exit: 20
   lint: 15
-  time: 10
+  time: 5
   lines: 5

@@ -47,6 +47,82 @@ description: |
   Do NOT modify any other files.
 repo: .
 test_command: python3 -m pytest test_csv_analyzer.py -x -q
+verify_command: python3 -m pytest verify_csv_analyzer.py -x -q
+verify_files:
+  verify_csv_analyzer.py: |
+    import subprocess
+    import sys
+
+
+    def run_analyzer(csv_text: str) -> str:
+      proc = subprocess.run(
+          [sys.executable, "csv_analyzer.py"],
+          input=csv_text,
+          text=True,
+          capture_output=True,
+          check=False,
+      )
+      assert proc.returncode == 0, proc.stderr
+      return proc.stdout
+
+
+    def extract_section(output: str, column_name: str) -> dict[str, str]:
+      lines = output.splitlines()
+      start = lines.index(f"Column: {column_name}") + 1
+      section: dict[str, str] = {}
+      for line in lines[start:]:
+          if not line.strip():
+              break
+          key, value = line.split(": ", 1)
+          section[key] = value
+      return section
+
+
+    def test_header_only_csv_reports_zero_rows() -> None:
+      output = run_analyzer("a,b,c\\n")
+      assert "Rows: 0" in output
+      assert "Columns: 3" in output
+      for col in ("a", "b", "c"):
+          section = extract_section(output, col)
+          assert section["Non-empty"] == "0"
+
+
+    def test_quoted_fields_with_commas_and_newlines() -> None:
+      csv_text = (
+          "name,notes\\n"
+          '"alpha, inc","line1\\nline2"\\n'
+          '"beta","x, y, z"\\n'
+      )
+      output = run_analyzer(csv_text)
+      assert "Rows: 2" in output
+      assert "Columns: 2" in output
+      name = extract_section(output, "name")
+      notes = extract_section(output, "notes")
+      assert name["Type"] == "text"
+      assert notes["Type"] == "text"
+      assert name["Unique"] == "2"
+      assert notes["Unique"] == "2"
+
+
+    def test_large_dataset_numeric_summary() -> None:
+      rows = ["id,value,group"]
+      for i in range(1, 2001):
+          rows.append(f"{i},{i},g{i % 10}")
+      output = run_analyzer("\\n".join(rows) + "\\n")
+
+      assert "Rows: 2000" in output
+      assert "Columns: 3" in output
+
+      value = extract_section(output, "value")
+      assert value["Type"] == "numeric"
+      assert value["Non-empty"] == "2000"
+      assert float(value["Min"]) == 1.0
+      assert float(value["Max"]) == 2000.0
+      assert float(value["Mean"]) == 1000.5
+
+      group = extract_section(output, "group")
+      assert group["Type"] == "text"
+      assert group["Unique"] == "10"
 lint_command: ruff check csv_analyzer.py
 timeout: 300
 agents:
@@ -56,8 +132,9 @@ agents:
   - aider
   - opencode
 scoring:
-  tests: 50
+  tests: 25
+  verify: 30
   exit: 20
   lint: 15
-  time: 10
+  time: 5
   lines: 5

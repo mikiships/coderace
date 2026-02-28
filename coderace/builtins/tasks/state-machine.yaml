@@ -1,0 +1,127 @@
+name: state-machine
+difficulty: medium-hard
+description: |
+  Implement a finite state machine in `state_machine.py`.
+
+  Implement these public classes:
+
+  - `StateMachine`
+  - `State`
+  - `Transition`
+  - `InvalidTransition` (exception raised for illegal transitions)
+
+  Required `StateMachine` API:
+
+  - `add_state(name, on_enter=None, on_exit=None)`
+  - `add_transition(from_state, to_state, event, guard=None, action=None)`
+  - `trigger(event)`
+  - `current_state` property
+
+  Behavior requirements:
+  - The first state added becomes the initial `current_state`.
+  - `trigger(event)` finds transitions from the current state matching `event`.
+  - If multiple transitions match the event, pick the first transition whose
+    guard passes.
+  - If no transition is valid for the event, raise `InvalidTransition`.
+  - On a successful transition:
+    1) run source state's `on_exit`
+    2) run transition `action`
+    3) update current state
+    4) run destination state's `on_enter`
+  - Guards and callbacks may be plain callables.
+
+  Create your own `test_state_machine.py` and ensure it passes.
+  Do NOT modify files other than `state_machine.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_state_machine.py -x -q
+verify_command: python3 -m pytest verify_state_machine.py -x -q
+verify_files:
+  verify_state_machine.py: |
+    import pytest
+
+    from state_machine import InvalidTransition, StateMachine
+
+
+    def _marker(log: list[str], label: str):
+        def _fn(*_args, **_kwargs):
+            log.append(label)
+
+        return _fn
+
+
+    def test_transition_order_and_hooks() -> None:
+        log: list[str] = []
+        sm = StateMachine()
+
+        sm.add_state("idle", on_enter=_marker(log, "enter_idle"), on_exit=_marker(log, "exit_idle"))
+        sm.add_state("running", on_enter=_marker(log, "enter_running"), on_exit=_marker(log, "exit_running"))
+        sm.add_state("done", on_enter=_marker(log, "enter_done"), on_exit=_marker(log, "exit_done"))
+
+        sm.add_transition("idle", "running", "start", guard=lambda *_a, **_k: True, action=_marker(log, "action_start"))
+        sm.add_transition("running", "done", "finish", guard=lambda *_a, **_k: True, action=_marker(log, "action_finish"))
+
+        assert sm.current_state == "idle"
+        sm.trigger("start")
+        assert sm.current_state == "running"
+        sm.trigger("finish")
+        assert sm.current_state == "done"
+
+        assert "exit_idle" in log
+        assert "action_start" in log
+        assert "enter_running" in log
+        assert log.index("exit_idle") < log.index("action_start") < log.index("enter_running")
+        assert log.index("exit_running") < log.index("action_finish") < log.index("enter_done")
+
+
+    def test_guard_blocks_transition_until_condition_changes() -> None:
+        sm = StateMachine()
+        allowed = {"ok": False}
+
+        sm.add_state("locked")
+        sm.add_state("unlocked")
+        sm.add_transition("locked", "unlocked", "coin", guard=lambda *_a, **_k: allowed["ok"])
+
+        with pytest.raises(InvalidTransition):
+            sm.trigger("coin")
+
+        allowed["ok"] = True
+        sm.trigger("coin")
+        assert sm.current_state == "unlocked"
+
+
+    def test_invalid_events_raise_invalid_transition() -> None:
+        sm = StateMachine()
+        sm.add_state("a")
+        sm.add_state("b")
+        sm.add_transition("a", "b", "go")
+
+        with pytest.raises(InvalidTransition):
+            sm.trigger("missing-event")
+
+
+    def test_first_passing_guard_wins() -> None:
+        sm = StateMachine()
+        sm.add_state("start")
+        sm.add_state("path1")
+        sm.add_state("path2")
+
+        sm.add_transition("start", "path1", "next", guard=lambda *_a, **_k: False)
+        sm.add_transition("start", "path2", "next", guard=lambda *_a, **_k: True)
+
+        sm.trigger("next")
+        assert sm.current_state == "path2"
+lint_command: ruff check state_machine.py
+timeout: 900
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

@@ -37,6 +37,68 @@ description: |
   Do NOT modify any other files.
 repo: .
 test_command: python3 -m pytest test_json_parser.py -x -q
+verify_command: python3 -m pytest verify_json_parser.py -x -q
+verify_files:
+  verify_json_parser.py: |
+    import pytest
+
+    from json_parser import parse_json
+
+
+    def test_nested_structures_and_mixed_types() -> None:
+        text = """
+        {
+          "meta": {"version": 1, "flags": [true, false, null]},
+          "users": [
+            {"id": 1, "name": "Ada", "roles": ["admin", "user"]},
+            {"id": 2, "name": "Lin", "roles": []}
+          ],
+          "metrics": {"scores": [1, 2.5, -3, 4e2]}
+        }
+        """
+        parsed = parse_json(text)
+        assert parsed["meta"]["flags"] == [True, False, None]
+        assert parsed["users"][0]["name"] == "Ada"
+        assert parsed["users"][1]["roles"] == []
+        assert parsed["metrics"]["scores"] == [1, 2.5, -3, 400.0]
+
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            '{"a": 1,}',
+            "[1, 2, ]",
+            '{"a" 1}',
+            '{"a":}',
+            '{"a": tru}',
+            '{"a": "unterminated}',
+            '{"a": "bad\\\\xescape"}',
+            "[,1]",
+            '{"a": 1} trailing',
+            '{"a": [1 2]}',
+        ],
+    )
+    def test_malformed_json_rejected(text: str) -> None:
+        with pytest.raises(ValueError):
+            parse_json(text)
+
+
+    def test_unicode_literals_and_escapes() -> None:
+        parsed = parse_json('{"city":"Montréal","emoji":"😀","snowman":"\\\\u2603"}')
+        assert parsed["city"] == "Montréal"
+        assert parsed["emoji"] == "😀"
+        assert parsed["snowman"] == "☃"
+
+
+    def test_deeply_nested_arrays() -> None:
+        depth = 25
+        text = "[" * depth + "0" + "]" * depth
+        value = parse_json(text)
+        for _ in range(depth):
+            assert isinstance(value, list)
+            assert len(value) == 1
+            value = value[0]
+        assert value == 0
 lint_command: ruff check json_parser.py
 timeout: 600
 agents:
@@ -46,8 +108,9 @@ agents:
   - aider
   - opencode
 scoring:
-  tests: 50
+  tests: 25
+  verify: 30
   exit: 20
   lint: 15
-  time: 10
+  time: 5
   lines: 5

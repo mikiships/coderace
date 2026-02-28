@@ -1,0 +1,112 @@
+name: cli-args-parser
+difficulty: medium
+description: |
+  Build a lightweight CLI argument parser in `cli_parser.py`.
+
+  Implement:
+
+  - `class ArgumentParser`
+    - `add_argument(name, type=str, default=None, required=False, help="") -> None`
+    - `parse(args: list[str]) -> Namespace`
+
+  Requirements:
+  - Support positional arguments (for names without leading `-`)
+  - Support boolean flags: `--flag` and short flags like `-v`
+  - Support key/value options in both forms:
+    - `--key=value`
+    - `--key value`
+  - Support boolean negation via `--no-flag` for declared boolean options
+  - Support bundled short flags (for example: `-abc` => `-a -b -c`)
+  - Convert argument values using the declared `type`
+  - Return a namespace-like object with attributes for argument names:
+    - `--dry-run` becomes `dry_run`
+    - `-v` becomes `v`
+  - Raise a clear exception for:
+    - missing required args
+    - unknown args
+    - type conversion failures
+
+  Create your own `test_cli_parser.py` and ensure it passes.
+  Do NOT modify files other than `cli_parser.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_cli_parser.py -x -q
+verify_command: python3 -m pytest verify_cli_parser.py -x -q
+verify_files:
+  verify_cli_parser.py: |
+    import pytest
+
+    from cli_parser import ArgumentParser
+
+
+    def test_parses_positional_and_long_option_forms() -> None:
+        parser = ArgumentParser()
+        parser.add_argument("input", type=str, required=True, help="input file")
+        parser.add_argument("--count", type=int, default=0)
+        parser.add_argument("--name", type=str, default="anon")
+
+        ns = parser.parse(["data.txt", "--count", "3", "--name=build"])
+        assert ns.input == "data.txt"
+        assert ns.count == 3
+        assert ns.name == "build"
+
+
+    def test_boolean_flags_short_flags_and_negation() -> None:
+        parser = ArgumentParser()
+        parser.add_argument("--verbose", type=bool, default=False)
+        parser.add_argument("--cache", type=bool, default=True)
+        parser.add_argument("-a", type=bool, default=False)
+        parser.add_argument("-b", type=bool, default=False)
+
+        ns = parser.parse(["--verbose", "--no-cache", "-ab"])
+        assert ns.verbose is True
+        assert ns.cache is False
+        assert ns.a is True
+        assert ns.b is True
+
+
+    def test_hyphenated_option_name_maps_to_underscore_attribute() -> None:
+        parser = ArgumentParser()
+        parser.add_argument("--dry-run", type=bool, default=False)
+        ns = parser.parse(["--dry-run"])
+        assert ns.dry_run is True
+
+
+    def test_missing_required_and_conversion_errors_are_clear() -> None:
+        parser = ArgumentParser()
+        parser.add_argument("input", type=str, required=True)
+        parser.add_argument("--count", type=int, required=True)
+
+        with pytest.raises(Exception) as missing_error:
+            parser.parse([])
+        missing_message = str(missing_error.value).lower()
+        assert "input" in missing_message or "count" in missing_message
+
+        with pytest.raises(Exception) as type_error:
+            parser.parse(["file.txt", "--count", "not-an-int"])
+        type_message = str(type_error.value).lower()
+        assert "count" in type_message
+        assert "int" in type_message or "convert" in type_message
+
+
+    def test_unknown_option_is_rejected() -> None:
+        parser = ArgumentParser()
+        parser.add_argument("input", type=str, required=True)
+
+        with pytest.raises(Exception) as unknown_error:
+            parser.parse(["file.txt", "--wat"])
+        assert "unknown" in str(unknown_error.value).lower()
+lint_command: ruff check cli_parser.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

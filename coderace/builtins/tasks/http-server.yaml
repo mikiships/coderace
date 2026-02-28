@@ -49,6 +49,103 @@ description: |
   Do NOT modify any other files.
 repo: .
 test_command: python3 -m pytest test_http_server.py -x -q
+verify_command: python3 -m pytest verify_http_server.py -x -q
+verify_files:
+  verify_http_server.py: |
+    from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
+    import urllib.error
+    import urllib.request
+
+    import pytest
+
+    from http_server import SimpleHTTPServer
+
+
+    @pytest.fixture
+    def running_server(tmp_path: Path):
+        files = {
+            "index.html": "<h1>Hello</h1>",
+            "style.css": "body{color:black;}",
+            "app.js": "console.log('ok')",
+            "data.json": '{"ok": true}',
+            "data.txt": "plain-text",
+            "blob.bin": "\\x00\\x01\\x02",
+        }
+        for name, content in files.items():
+            path = tmp_path / name
+            if isinstance(content, str):
+                path.write_text(content)
+            else:
+                path.write_bytes(content)
+
+        server = SimpleHTTPServer(host="127.0.0.1", port=0, root_dir=str(tmp_path))
+        server.start()
+        try:
+            yield server
+        finally:
+            server.stop()
+
+
+    def _fetch(url: str, method: str = "GET") -> tuple[int, bytes, dict[str, str]]:
+        req = urllib.request.Request(url, method=method)
+        with urllib.request.urlopen(req, timeout=2.0) as response:
+            status = response.getcode()
+            body = response.read()
+            headers = {k.lower(): v for k, v in response.headers.items()}
+        return status, body, headers
+
+
+    def test_success_response_contains_required_headers(running_server: SimpleHTTPServer) -> None:
+        url = f"http://127.0.0.1:{running_server.port}/data.txt"
+        status, body, headers = _fetch(url)
+        assert status == 200
+        assert headers["content-type"] == "text/plain"
+        assert int(headers["content-length"]) == len(body)
+        assert body == b"plain-text"
+
+
+    def test_error_responses_for_missing_and_wrong_method(running_server: SimpleHTTPServer) -> None:
+        base = f"http://127.0.0.1:{running_server.port}"
+
+        with pytest.raises(urllib.error.HTTPError) as missing:
+            _fetch(f"{base}/missing.txt")
+        assert missing.value.code == 404
+
+        with pytest.raises(urllib.error.HTTPError) as wrong_method:
+            _fetch(f"{base}/data.txt", method="POST")
+        assert wrong_method.value.code == 405
+
+
+    def test_content_type_mapping(running_server: SimpleHTTPServer) -> None:
+        base = f"http://127.0.0.1:{running_server.port}"
+        expected = {
+            "/index.html": "text/html",
+            "/style.css": "text/css",
+            "/app.js": "application/javascript",
+            "/data.json": "application/json",
+            "/data.txt": "text/plain",
+            "/blob.bin": "application/octet-stream",
+        }
+        for path, content_type in expected.items():
+            status, _body, headers = _fetch(f"{base}{path}")
+            assert status == 200
+            assert headers["content-type"] == content_type
+
+
+    def test_handles_concurrent_requests(running_server: SimpleHTTPServer) -> None:
+        url = f"http://127.0.0.1:{running_server.port}/index.html"
+
+        def fetch_once() -> tuple[int, bytes]:
+            status, body, _headers = _fetch(url)
+            return status, body
+
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            results = list(executor.map(lambda _i: fetch_once(), range(48)))
+
+        for status, body in results:
+            assert status == 200
+            assert body == b"<h1>Hello</h1>"
 lint_command: ruff check http_server.py
 timeout: 600
 agents:
@@ -58,8 +155,9 @@ agents:
   - aider
   - opencode
 scoring:
-  tests: 50
+  tests: 25
+  verify: 30
   exit: 20
   lint: 15
-  time: 10
+  time: 5
   lines: 5

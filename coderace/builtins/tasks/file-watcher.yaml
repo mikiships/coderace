@@ -1,0 +1,138 @@
+name: file-watcher
+difficulty: medium
+description: |
+  Build a directory file watcher utility in `file_watcher.py`.
+
+  Implement these public types and APIs:
+
+  - `FileInfo` with fields:
+    - `path: str` (relative POSIX path from the scanned directory)
+    - `size: int`
+    - `modified_time: float`
+    - `hash: str` (MD5 hex digest)
+  - `Change` with fields:
+    - `path: str` (relative POSIX path)
+    - `change_type: str` (`"added"`, `"modified"`, or `"deleted"`)
+  - `class FileWatcher` with methods:
+    - `scan(directory) -> dict[str, FileInfo]`
+    - `diff(old_scan, new_scan) -> list[Change]`
+
+  Behavior requirements:
+  - `scan(...)` must recursively include files from nested directories.
+  - Ignore directories in scan results; only include files.
+  - Paths in scan/diff outputs must be relative to the scanned directory
+    and normalized with forward slashes.
+  - File hashes must be computed from file bytes using MD5.
+  - `diff(...)` must report:
+    - `added` for files present only in `new_scan`
+    - `deleted` for files present only in `old_scan`
+    - `modified` for files in both scans whose size, modified_time,
+      or hash changed
+
+  Create your own `test_file_watcher.py` and ensure it passes.
+  Do NOT modify files other than `file_watcher.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_file_watcher.py -x -q
+verify_command: python3 -m pytest verify_file_watcher.py -x -q
+verify_files:
+  verify_file_watcher.py: |
+    import hashlib
+    import time
+    from pathlib import Path
+
+    from file_watcher import FileWatcher
+
+
+    def _field(obj, name: str):
+        if isinstance(obj, dict):
+            return obj[name]
+        return getattr(obj, name)
+
+
+    def _change_signature(change) -> tuple[str, str]:
+        if (isinstance(change, dict) and "change_type" in change) or hasattr(change, "change_type"):
+            change_type = _field(change, "change_type")
+        else:
+            change_type = _field(change, "type")
+        return change_type, _field(change, "path")
+
+
+    def test_scan_collects_nested_files_with_metadata(tmp_path: Path) -> None:
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "root.txt").write_text("root")
+        (tmp_path / "sub" / "nested.txt").write_text("nested-data")
+
+        watcher = FileWatcher()
+        result = watcher.scan(tmp_path)
+
+        assert set(result.keys()) == {"root.txt", "sub/nested.txt"}
+
+        root_info = result["root.txt"]
+        nested_info = result["sub/nested.txt"]
+
+        assert _field(root_info, "path") == "root.txt"
+        assert _field(nested_info, "path") == "sub/nested.txt"
+        assert _field(root_info, "size") == 4
+        assert _field(nested_info, "size") == 11
+        assert _field(root_info, "hash") == hashlib.md5(b"root").hexdigest()  # noqa: S324
+        assert _field(nested_info, "hash") == hashlib.md5(b"nested-data").hexdigest()  # noqa: S324
+
+
+    def test_diff_detects_added_modified_deleted(tmp_path: Path) -> None:
+        (tmp_path / "keep.txt").write_text("same")
+        (tmp_path / "change.txt").write_text("before")
+        (tmp_path / "remove.txt").write_text("gone")
+
+        watcher = FileWatcher()
+        old_scan = watcher.scan(tmp_path)
+
+        time.sleep(0.02)
+        (tmp_path / "change.txt").write_text("after")
+        (tmp_path / "remove.txt").unlink()
+        (tmp_path / "new.txt").write_text("brand-new")
+
+        new_scan = watcher.scan(tmp_path)
+        changes = watcher.diff(old_scan, new_scan)
+        signatures = {_change_signature(change) for change in changes}
+
+        assert ("modified", "change.txt") in signatures
+        assert ("deleted", "remove.txt") in signatures
+        assert ("added", "new.txt") in signatures
+        assert ("modified", "keep.txt") not in signatures
+
+
+    def test_diff_handles_empty_to_populated_and_back(tmp_path: Path) -> None:
+        watcher = FileWatcher()
+        empty_scan = watcher.scan(tmp_path)
+        assert empty_scan == {}
+
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "b.txt").write_text("b")
+        populated = watcher.scan(tmp_path)
+
+        changes_add = watcher.diff(empty_scan, populated)
+        add_signatures = {_change_signature(change) for change in changes_add}
+        assert add_signatures == {("added", "a.txt"), ("added", "b.txt")}
+
+        (tmp_path / "a.txt").unlink()
+        (tmp_path / "b.txt").unlink()
+        back_to_empty = watcher.scan(tmp_path)
+
+        changes_delete = watcher.diff(populated, back_to_empty)
+        delete_signatures = {_change_signature(change) for change in changes_delete}
+        assert delete_signatures == {("deleted", "a.txt"), ("deleted", "b.txt")}
+lint_command: ruff check file_watcher.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5
