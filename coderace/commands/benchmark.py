@@ -124,6 +124,7 @@ def benchmark_main(
         trials=trials,
         progress_callback=progress_callback,
     )
+    rating_update = _update_benchmark_ratings(benchmark_result)
 
     console.print()
 
@@ -172,6 +173,8 @@ def benchmark_main(
             Path(output).write_text(md, encoding="utf-8")
             console.print(f"\n[dim]Report saved to {output}[/dim]")
 
+    _print_rating_deltas(rating_update, benchmark_result.agents)
+
     # Save to store
     if not no_save:
         _save_benchmark_to_store(benchmark_result, stats)
@@ -187,6 +190,57 @@ def _save_benchmark_to_store(benchmark_result, stats) -> None:
         store.close()
     except Exception:
         pass
+
+
+def _update_benchmark_ratings(benchmark_result):
+    """Update persisted ELO ratings from a completed benchmark."""
+    store = None
+    try:
+        from coderace.elo import update_ratings
+        from coderace.store import ResultStore
+
+        store = ResultStore()
+        current = store.get_elo_ratings()
+        rating_update = update_ratings(benchmark_result, current_ratings=current)
+        store.upsert_elo_ratings(rating_update.after)
+        return rating_update
+    except Exception:
+        return None
+    finally:
+        if store is not None:
+            store.close()
+
+
+def _print_rating_deltas(rating_update, agents: list[str]) -> None:
+    """Print ELO rating deltas for benchmark participants."""
+    if rating_update is None:
+        return
+    from rich.table import Table
+
+    ordered_agents = sorted(
+        agents,
+        key=lambda agent: rating_update.after.get(agent, 1500.0),
+        reverse=True,
+    )
+    table = Table(title="ELO Ratings", show_lines=True)
+    table.add_column("Agent", style="cyan")
+    table.add_column("Before", justify="right")
+    table.add_column("After", justify="right")
+    table.add_column("Delta", justify="right")
+
+    for agent in ordered_agents:
+        before = rating_update.before.get(agent, 1500.0)
+        after = rating_update.after.get(agent, before)
+        delta = after - before
+        table.add_row(
+            agent,
+            f"{before:.1f}",
+            f"{after:.1f}",
+            f"{delta:+.1f}",
+        )
+
+    console.print()
+    console.print(table)
 
 
 @app.command("history")

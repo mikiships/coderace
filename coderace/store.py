@@ -88,6 +88,14 @@ CREATE TABLE IF NOT EXISTS benchmark_results (
 );
 
 CREATE INDEX IF NOT EXISTS idx_benchmark_results_bid ON benchmark_results(benchmark_id);
+
+CREATE TABLE IF NOT EXISTS elo_ratings (
+    agent TEXT PRIMARY KEY,
+    rating REAL NOT NULL DEFAULT 1500,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_elo_ratings_rating ON elo_ratings(rating DESC);
 """
 
 
@@ -463,6 +471,41 @@ class ResultStore:
                 ),
             )
         conn.commit()
+
+    def get_elo_ratings(self) -> dict[str, float]:
+        """Return persisted ELO ratings sorted by rating descending."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT agent, rating FROM elo_ratings ORDER BY rating DESC, agent ASC"
+        ).fetchall()
+        return {row["agent"]: float(row["rating"]) for row in rows}
+
+    def upsert_elo_ratings(self, ratings: dict[str, float]) -> None:
+        """Insert or update ELO ratings for agents."""
+        if not ratings:
+            return
+        conn = self._get_conn()
+        ts = datetime.now(timezone.utc).isoformat()
+        for agent, rating in ratings.items():
+            conn.execute(
+                "INSERT INTO elo_ratings (agent, rating, updated_at) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(agent) DO UPDATE SET "
+                "rating=excluded.rating, updated_at=excluded.updated_at",
+                (agent, float(rating), ts),
+            )
+        conn.commit()
+
+    def reset_elo_ratings(self, initial_rating: float = 1500.0) -> int:
+        """Reset all stored ELO ratings to the initial value."""
+        conn = self._get_conn()
+        ts = datetime.now(timezone.utc).isoformat()
+        cursor = conn.execute(
+            "UPDATE elo_ratings SET rating = ?, updated_at = ?",
+            (float(initial_rating), ts),
+        )
+        conn.commit()
+        return cursor.rowcount
 
     def get_benchmarks(self, limit: int = 10) -> list[dict]:
         """List past benchmark runs, newest first."""

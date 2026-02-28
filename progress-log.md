@@ -520,3 +520,48 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 
 **Blockers:**
 - None.
+
+### D3: Persistent ELO Ratings (`coderace/elo.py` + CLI/store integration) ✅
+
+**Built:**
+- Added `coderace/elo.py`:
+  - Standard ELO functions with `K=32` (`expected_score`, `update_pair_ratings`)
+  - `update_ratings(...)` benchmark integration:
+    - per-task round-robin pairwise matches
+    - mean trial score comparison per `(task, agent)`
+    - draw handling for score differences within `1.0`
+  - `RatingUpdate` snapshot dataclass (`before`/`after`/`deltas`)
+- Updated `coderace/store.py`:
+  - Added `elo_ratings` table (`agent`, `rating`, `updated_at`)
+  - Added `get_elo_ratings()`, `upsert_elo_ratings(...)`, `reset_elo_ratings(...)`
+  - Migration compatibility retained for existing DBs
+- Updated benchmark flow in `coderace/commands/benchmark.py`:
+  - Auto-updates persistent ELO ratings after each benchmark run
+  - Prints ELO before/after/delta summary table for participating agents
+- Added top-level CLI command in `coderace/cli.py`:
+  - `coderace ratings`
+  - `coderace ratings --json`
+  - `coderace ratings --reset`
+
+**Tests:**
+- Added `tests/test_elo.py` with 11 tests covering:
+  - initial/equal expected score
+  - single-match update
+  - missing-agent initialization to 1500
+  - draw handling within 1-point margin
+  - multi-task update behavior
+  - repeated-win convergence
+  - rating reset
+  - `coderace ratings --json`
+  - `coderace ratings --reset`
+  - backward-compatible migration from legacy DB schema
+  - benchmark integration persistence path
+- Full suite validation:
+  - `python3 -m pytest`
+  - Result: **437 passed**
+
+**Next:**
+- D4: standardized export JSON + benchmark report statistical enhancements + ELO display.
+
+**Blockers:**
+- None.

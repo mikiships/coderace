@@ -742,6 +742,50 @@ def leaderboard(
 
 
 @app.command()
+def ratings(
+    reset: bool = typer.Option(False, "--reset", help="Reset all ELO ratings to 1500"),
+    as_json: bool = typer.Option(False, "--json", help="Output ratings as JSON"),
+) -> None:
+    """Show or reset persistent benchmark ELO ratings."""
+    from coderace.store import ResultStore
+
+    try:
+        store = ResultStore()
+    except Exception as exc:
+        console.print(f"[red]Cannot open result store: {exc}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        if reset:
+            store.reset_elo_ratings(initial_rating=1500.0)
+        ratings_map = store.get_elo_ratings()
+    finally:
+        store.close()
+
+    if as_json:
+        import json
+        import sys
+
+        sys.stdout.write(json.dumps(ratings_map, indent=2) + "\n")
+        return
+
+    if not ratings_map:
+        console.print("[yellow]No ELO ratings yet. Run `coderace benchmark` first.[/yellow]")
+        return
+
+    from rich.table import Table
+
+    table = Table(title="ELO Ratings", show_lines=True)
+    table.add_column("Rank", justify="right")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Rating", justify="right")
+
+    for idx, (agent, rating) in enumerate(ratings_map.items(), start=1):
+        table.add_row(str(idx), agent, f"{rating:.1f}")
+    console.print(table)
+
+
+@app.command()
 def history(
     task: str | None = typer.Option(
         None, "--task", help="Filter by task name"
