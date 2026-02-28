@@ -11,6 +11,7 @@ from rich.table import Table
 
 from coderace.benchmark import BenchmarkResult
 from coderace.benchmark_stats import BenchmarkStats
+from coderace.statistics import compute_aggregate_stats, compute_trial_stats
 
 
 def _has_verification(result: BenchmarkResult) -> bool:
@@ -69,13 +70,369 @@ def _verify_details_rows(
     return rows
 
 
+def _is_multi_trial(result: BenchmarkResult) -> bool:
+    if result.trials > 1:
+        return True
+    seen: set[tuple[str, str]] = set()
+    for row in result.results:
+        key = (row.task_name, row.agent)
+        if key in seen:
+            return True
+        seen.add(key)
+    return False
+
+
+def _task_reliability(result: BenchmarkResult, task_name: str) -> float:
+    task_rows = [row for row in result.results if row.task_name == task_name]
+    if not task_rows:
+        return 0.0
+    ok = sum(1 for row in task_rows if not row.timed_out and not row.error)
+    return ok / len(task_rows)
+
+
+def _render_elo_terminal(console: Console, elo_ratings: dict[str, float]) -> None:
+    if not elo_ratings:
+        return
+    table = Table(title="ELO Ratings", show_lines=True, expand=False)
+    table.add_column("Rank", justify="right")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Rating", justify="right")
+    for idx, (agent, rating) in enumerate(
+        sorted(elo_ratings.items(), key=lambda item: item[1], reverse=True),
+        start=1,
+    ):
+        table.add_row(str(idx), agent, f"{rating:.1f}")
+    console.print()
+    console.print(table)
+
+
+def _render_elo_markdown(elo_ratings: dict[str, float]) -> str:
+    if not elo_ratings:
+        return ""
+    lines = ["## ELO Ratings", "", "| Rank | Agent | Rating |", "|------|-------|--------|"]
+    for idx, (agent, rating) in enumerate(
+        sorted(elo_ratings.items(), key=lambda item: item[1], reverse=True),
+        start=1,
+    ):
+        lines.append(f"| {idx} | {agent} | {rating:.1f} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_elo_html(elo_ratings: dict[str, float]) -> str:
+    if not elo_ratings:
+        return ""
+    rows = []
+    for idx, (agent, rating) in enumerate(
+        sorted(elo_ratings.items(), key=lambda item: item[1], reverse=True),
+        start=1,
+    ):
+        rows.append(
+            "<tr>"
+            f"<td>{idx}</td>"
+            f"<td>{_html_mod.escape(agent)}</td>"
+            f"<td>{rating:.1f}</td>"
+            "</tr>"
+        )
+    rows_html = "\n".join(rows)
+    return f"""
+<h2>ELO Ratings</h2>
+<table>
+<thead><tr><th>Rank</th><th>Agent</th><th>Rating</th></tr></thead>
+<tbody>
+{rows_html}
+</tbody>
+</table>
+"""
+
+
+def _render_benchmark_terminal_trials(
+    result: BenchmarkResult,
+    console: Console,
+    elo_ratings: dict[str, float] | None = None,
+) -> None:
+    trial_stats = compute_trial_stats(result)
+    aggregate_stats = compute_aggregate_stats(result, trial_stats=trial_stats)
+    trial_lookup = {(row.task_name, row.agent): row for row in trial_stats}
+    aggregate_lookup = {row.agent: row for row in aggregate_stats}
+
+    table = Table(title="coderace benchmark (statistical)", show_lines=True, expand=False)
+    table.add_column("Task", style="bold")
+    for agent in result.agents:
+        table.add_column(agent, justify="center")
+    table.add_column("CI (95%)", justify="center")
+    table.add_column("Consistency", justify="center")
+    table.add_column("Reliability", justify="center")
+
+    for task_name in result.tasks:
+        row_values = [task_name]
+        task_stat_rows = []
+        for agent in result.agents:
+            stat = trial_lookup.get((task_name, agent))
+            if stat is None:
+                row_values.append("-")
+                continue
+            task_stat_rows.append(stat)
+            row_values.append(
+                f"[green]{stat.mean_score:.1f}+/-{stat.stddev_score:.1f}[/green] "
+                f"[dim]({stat.mean_wall_time:.0f}s)[/dim]"
+            )
+        if task_stat_rows:
+            best = max(task_stat_rows, key=lambda r: r.mean_score)
+            ci_text = f"{best.ci_95[0]:.1f}..{best.ci_95[1]:.1f}"
+            consistency = sum(r.consistency_score for r in task_stat_rows) / len(task_stat_rows)
+        else:
+            ci_text = "-"
+            consistency = 0.0
+        reliability = _task_reliability(result, task_name)
+        row_values.extend(
+            [
+                ci_text,
+                f"{int(round(consistency * 100))}%",
+                f"{int(round(reliability * 100))}%",
+            ]
+        )
+        table.add_row(*row_values)
+
+    mean_row = ["[bold]Mean Score[/bold]"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        mean_row.append(f"[bold]{agg.mean_score:.1f}[/bold]" if agg else "-")
+    mean_row.extend(["-", "-", "-"])
+    table.add_row(*mean_row)
+
+    ci_row = ["[bold]CI (95%)[/bold]"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        if agg:
+            ci_row.append(f"{agg.score_ci_95[0]:.1f}..{agg.score_ci_95[1]:.1f}")
+        else:
+            ci_row.append("-")
+    ci_row.extend(["-", "-", "-"])
+    table.add_row(*ci_row)
+
+    win_row = ["[bold]Win Rate[/bold]"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        win_row.append(f"{int(round((agg.win_rate if agg else 0.0) * 100))}%")
+    win_row.extend(["-", "-", "-"])
+    table.add_row(*win_row)
+
+    rel_row = ["[bold]Reliability[/bold]"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        rel_row.append(f"{int(round((agg.reliability if agg else 0.0) * 100))}%")
+    rel_row.extend(["-", "-", "-"])
+    table.add_row(*rel_row)
+
+    console.print(table)
+
+    if aggregate_stats:
+        winner = aggregate_stats[0]
+        console.print(
+            f"\n[bold green]Winner: {winner.agent}[/bold green] "
+            f"(mean score: {winner.mean_score:.1f})"
+        )
+
+    _render_elo_terminal(console, elo_ratings or {})
+
+
+def _render_benchmark_markdown_trials(
+    result: BenchmarkResult,
+    elo_ratings: dict[str, float] | None = None,
+) -> str:
+    trial_stats = compute_trial_stats(result)
+    aggregate_stats = compute_aggregate_stats(result, trial_stats=trial_stats)
+    trial_lookup = {(row.task_name, row.agent): row for row in trial_stats}
+    aggregate_lookup = {row.agent: row for row in aggregate_stats}
+
+    lines: list[str] = []
+    lines.append("# coderace Benchmark Results\n")
+    lines.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n")
+    lines.append(f"Benchmark ID: `{result.benchmark_id}`\n")
+    lines.append("")
+
+    headers = ["Task", *result.agents, "CI (95%)", "Consistency", "Reliability"]
+    separator = "|" + "|".join(["------"] * len(headers)) + "|"
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append(separator)
+
+    for task_name in result.tasks:
+        cells = [task_name]
+        task_rows = []
+        for agent in result.agents:
+            stat = trial_lookup.get((task_name, agent))
+            if stat is None:
+                cells.append("-")
+                continue
+            task_rows.append(stat)
+            cells.append(f"{stat.mean_score:.1f}+/-{stat.stddev_score:.1f} ({stat.mean_wall_time:.0f}s)")
+        if task_rows:
+            best = max(task_rows, key=lambda r: r.mean_score)
+            ci_text = f"{best.ci_95[0]:.1f}..{best.ci_95[1]:.1f}"
+            consistency = sum(r.consistency_score for r in task_rows) / len(task_rows)
+        else:
+            ci_text = "-"
+            consistency = 0.0
+        reliability = _task_reliability(result, task_name)
+        cells.append(ci_text)
+        cells.append(f"{int(round(consistency * 100))}%")
+        cells.append(f"{int(round(reliability * 100))}%")
+        lines.append("| " + " | ".join(cells) + " |")
+
+    lines.append(separator)
+
+    mean_cells = ["**Mean Score**"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        mean_cells.append(f"**{agg.mean_score:.1f}**" if agg else "-")
+    mean_cells.extend(["-", "-", "-"])
+    lines.append("| " + " | ".join(mean_cells) + " |")
+
+    ci_cells = ["**CI (95%)**"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        ci_cells.append(f"{agg.score_ci_95[0]:.1f}..{agg.score_ci_95[1]:.1f}" if agg else "-")
+    ci_cells.extend(["-", "-", "-"])
+    lines.append("| " + " | ".join(ci_cells) + " |")
+
+    win_cells = ["**Win Rate**"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        win_cells.append(f"{int(round((agg.win_rate if agg else 0.0) * 100))}%")
+    win_cells.extend(["-", "-", "-"])
+    lines.append("| " + " | ".join(win_cells) + " |")
+
+    rel_cells = ["**Reliability**"]
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        rel_cells.append(f"{int(round((agg.reliability if agg else 0.0) * 100))}%")
+    rel_cells.extend(["-", "-", "-"])
+    lines.append("| " + " | ".join(rel_cells) + " |")
+
+    lines.append("")
+    elo_section = _render_elo_markdown(elo_ratings or {})
+    if elo_section:
+        lines.append(elo_section)
+    return "\n".join(lines)
+
+
+def _render_benchmark_html_trials(
+    result: BenchmarkResult,
+    elo_ratings: dict[str, float] | None = None,
+) -> str:
+    trial_stats = compute_trial_stats(result)
+    aggregate_stats = compute_aggregate_stats(result, trial_stats=trial_stats)
+    trial_lookup = {(row.task_name, row.agent): row for row in trial_stats}
+    aggregate_lookup = {row.agent: row for row in aggregate_stats}
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    def esc(s: str) -> str:
+        return _html_mod.escape(str(s))
+
+    task_rows = ""
+    for task_name in result.tasks:
+        task_rows += f"<tr><td class='task'>{esc(task_name)}</td>"
+        task_stats = []
+        for agent in result.agents:
+            stat = trial_lookup.get((task_name, agent))
+            if stat is None:
+                task_rows += "<td>-</td>"
+            else:
+                task_stats.append(stat)
+                task_rows += (
+                    f"<td class='pass'>{stat.mean_score:.1f}+/-{stat.stddev_score:.1f}"
+                    f"<br><small>({stat.mean_wall_time:.0f}s)</small></td>"
+                )
+        if task_stats:
+            best = max(task_stats, key=lambda row: row.mean_score)
+            ci_text = f"{best.ci_95[0]:.1f}..{best.ci_95[1]:.1f}"
+            consistency = sum(row.consistency_score for row in task_stats) / len(task_stats)
+        else:
+            ci_text = "-"
+            consistency = 0.0
+        reliability = _task_reliability(result, task_name)
+        task_rows += f"<td>{esc(ci_text)}</td>"
+        task_rows += f"<td>{int(round(consistency * 100))}%</td>"
+        task_rows += f"<td>{int(round(reliability * 100))}%</td>"
+        task_rows += "</tr>\n"
+
+    mean_cells = ""
+    ci_cells = ""
+    win_cells = ""
+    rel_cells = ""
+    for agent in result.agents:
+        agg = aggregate_lookup.get(agent)
+        if agg:
+            mean_cells += f"<td><strong>{agg.mean_score:.1f}</strong></td>"
+            ci_cells += f"<td>{agg.score_ci_95[0]:.1f}..{agg.score_ci_95[1]:.1f}</td>"
+            win_cells += f"<td>{int(round(agg.win_rate * 100))}%</td>"
+            rel_cells += f"<td>{int(round(agg.reliability * 100))}%</td>"
+        else:
+            mean_cells += "<td>-</td>"
+            ci_cells += "<td>-</td>"
+            win_cells += "<td>-</td>"
+            rel_cells += "<td>-</td>"
+    winner = aggregate_stats[0].agent if aggregate_stats else "-"
+    agent_headers = "".join(f"<th>{esc(agent)}</th>" for agent in result.agents)
+    elo_section = _render_elo_html(elo_ratings or {})
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>coderace Benchmark — {esc(result.benchmark_id)}</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9; margin: 0; padding: 2rem; }}
+  h1, h2 {{ color: #58a6ff; }}
+  .meta {{ color: #8b949e; font-size: 0.9rem; margin-bottom: 1.5rem; }}
+  .winner {{ background: #1f6feb33; border: 1px solid #1f6feb; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 2rem; }}
+  th {{ background: #161b22; color: #58a6ff; padding: 0.6rem 1rem; border: 1px solid #30363d; }}
+  td {{ padding: 0.5rem 1rem; border: 1px solid #30363d; text-align: center; }}
+  td.task {{ text-align: left; font-weight: 500; color: #e6edf3; }}
+  td.pass {{ color: #3fb950; }}
+  tr.summary td {{ background: #161b22; font-weight: bold; color: #e6edf3; }}
+  small {{ color: #8b949e; }}
+</style>
+</head>
+<body>
+<h1>coderace Benchmark (Statistical)</h1>
+<div class="meta">
+  ID: {esc(result.benchmark_id)} &nbsp;|&nbsp; Generated: {now}
+</div>
+<div class="winner">
+  <strong>Winner:</strong> {esc(winner)}
+</div>
+<h2>Results</h2>
+<table>
+<thead><tr><th>Task</th>{agent_headers}<th>CI (95%)</th><th>Consistency</th><th>Reliability</th></tr></thead>
+<tbody>
+{task_rows}
+<tr class="summary"><td>Mean Score</td>{mean_cells}<td>-</td><td>-</td><td>-</td></tr>
+<tr class="summary"><td>CI (95%)</td>{ci_cells}<td>-</td><td>-</td><td>-</td></tr>
+<tr class="summary"><td>Win Rate</td>{win_cells}<td>-</td><td>-</td><td>-</td></tr>
+<tr class="summary"><td>Reliability</td>{rel_cells}<td>-</td><td>-</td><td>-</td></tr>
+</tbody>
+</table>
+{elo_section}
+</body>
+</html>
+"""
+
+
 def render_benchmark_terminal(
     result: BenchmarkResult,
     stats: BenchmarkStats,
     console: Optional[Console] = None,
+    elo_ratings: dict[str, float] | None = None,
 ) -> None:
     """Render a Rich terminal table for the benchmark results."""
     console = console or Console()
+    if _is_multi_trial(result):
+        _render_benchmark_terminal_trials(result, console, elo_ratings=elo_ratings)
+        return
 
     agents = result.agents
     tasks = result.tasks
@@ -178,12 +535,17 @@ def render_benchmark_terminal(
             console.print()
             console.print(verify_table)
 
+    _render_elo_terminal(console, elo_ratings or {})
+
 
 def render_benchmark_markdown(
     result: BenchmarkResult,
     stats: BenchmarkStats,
+    elo_ratings: dict[str, float] | None = None,
 ) -> str:
     """Render a GitHub-flavored markdown table for the benchmark results."""
+    if _is_multi_trial(result):
+        return _render_benchmark_markdown_trials(result, elo_ratings=elo_ratings)
     agents = result.agents
     tasks = result.tasks
     lookup = {(r.task_name, r.agent): r for r in result.results}
@@ -294,14 +656,21 @@ def render_benchmark_markdown(
                 )
             lines.append("")
 
+    elo_section = _render_elo_markdown(elo_ratings or {})
+    if elo_section:
+        lines.append(elo_section)
+
     return "\n".join(lines)
 
 
 def render_benchmark_html(
     result: BenchmarkResult,
     stats: BenchmarkStats,
+    elo_ratings: dict[str, float] | None = None,
 ) -> str:
     """Render a self-contained HTML report for the benchmark results."""
+    if _is_multi_trial(result):
+        return _render_benchmark_html_trials(result, elo_ratings=elo_ratings)
     agents = result.agents
     tasks = result.tasks
     lookup = {(r.task_name, r.agent): r for r in result.results}
@@ -388,6 +757,8 @@ def render_benchmark_html(
 </table>
 """
 
+    elo_section = _render_elo_html(elo_ratings or {})
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -430,6 +801,7 @@ def render_benchmark_html(
 </tbody>
 </table>
 {verify_details_section}
+{elo_section}
 </body>
 </html>
 """

@@ -565,3 +565,42 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 
 **Blockers:**
 - None.
+
+### D4: Standardized Export Format + Enhanced Report ✅
+
+**Built:**
+- Added `coderace/export.py`:
+  - `collect_system_info()` for `os`, `python`, `cpu`
+  - `export_benchmark_json(...)` writer for standardized JSON payload:
+    - metadata (`coderace_version`, benchmark id, timestamp)
+    - config (`trials`, `timeout`, `tasks`, `agents`)
+    - per `(task, agent)` statistical rows with CI, pass rate, consistency, and per-trial details
+    - current ELO ratings
+    - aggregate summary block
+- Updated `coderace/commands/benchmark.py`:
+  - Added `--export` flag to write standardized benchmark JSON output
+  - Wired export generation after benchmark completion
+  - Passed ELO ratings into report renderers
+- Enhanced `coderace/benchmark_report.py`:
+  - Added multi-trial statistical report mode (mean score +/- stddev in task grid)
+  - Added CI, consistency, and reliability columns for multi-trial reports
+  - Added ELO ratings section at the bottom (terminal/markdown/html)
+  - Preserved single-trial backward-compatible rendering path
+
+**Tests:**
+- Added `tests/test_export.py` with 6 tests covering:
+  - export JSON schema/structure
+  - system info collection
+  - statistical report columns for multi-trial mode
+  - single-trial report backward compatibility
+  - ELO ratings rendering in markdown/html
+  - CLI `--export` integration output
+- Full suite validation:
+  - `python3 -m pytest`
+  - Result: **443 passed**
+
+**Next:**
+- D5: version bump to `1.0.0`, README + changelog updates, final integration checks.
+
+**Blockers:**
+- None.

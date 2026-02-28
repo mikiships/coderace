@@ -42,6 +42,9 @@ def benchmark_main(
     output: Optional[str] = typer.Option(
         None, "--output", "-o", help="Save report to file (auto-selects format by extension)"
     ),
+    export: Optional[str] = typer.Option(
+        None, "--export", help="Export standardized benchmark JSON to file"
+    ),
     no_save: bool = typer.Option(
         False, "--no-save", help="Skip saving benchmark results to the store"
     ),
@@ -145,9 +148,10 @@ def benchmark_main(
     from coderace.benchmark_stats import compute_benchmark_stats
 
     stats = compute_benchmark_stats(benchmark_result)
+    elo_ratings = rating_update.after if rating_update is not None else None
 
     if out_fmt == "markdown":
-        md = render_benchmark_markdown(benchmark_result, stats)
+        md = render_benchmark_markdown(benchmark_result, stats, elo_ratings=elo_ratings)
         if output:
             from pathlib import Path
             Path(output).write_text(md, encoding="utf-8")
@@ -156,7 +160,7 @@ def benchmark_main(
             import sys
             sys.stdout.write(md)
     elif out_fmt == "html":
-        html_content = render_benchmark_html(benchmark_result, stats)
+        html_content = render_benchmark_html(benchmark_result, stats, elo_ratings=elo_ratings)
         if output:
             from pathlib import Path
             Path(output).write_text(html_content, encoding="utf-8")
@@ -165,15 +169,26 @@ def benchmark_main(
             import sys
             sys.stdout.write(html_content)
     else:
-        render_benchmark_terminal(benchmark_result, stats, console)
+        render_benchmark_terminal(benchmark_result, stats, console, elo_ratings=elo_ratings)
         if output:
             # Save markdown to file even in terminal mode if --output given
-            md = render_benchmark_markdown(benchmark_result, stats)
+            md = render_benchmark_markdown(benchmark_result, stats, elo_ratings=elo_ratings)
             from pathlib import Path
             Path(output).write_text(md, encoding="utf-8")
             console.print(f"\n[dim]Report saved to {output}[/dim]")
 
     _print_rating_deltas(rating_update, benchmark_result.agents)
+    if export:
+        _export_benchmark_json(
+            benchmark_result=benchmark_result,
+            export_path=export,
+            timeout=timeout,
+            trials=trials,
+            tasks=task_list,
+            agents=agent_list,
+            elo_ratings=elo_ratings or {},
+        )
+        console.print(f"[green]Benchmark export saved to:[/green] {export}")
 
     # Save to store
     if not no_save:
@@ -243,6 +258,29 @@ def _print_rating_deltas(rating_update, agents: list[str]) -> None:
     console.print(table)
 
 
+def _export_benchmark_json(
+    benchmark_result,
+    export_path: str,
+    timeout: int,
+    trials: int,
+    tasks: list[str],
+    agents: list[str],
+    elo_ratings: dict[str, float],
+) -> None:
+    """Write standardized benchmark export JSON."""
+    from coderace.export import export_benchmark_json
+
+    export_benchmark_json(
+        benchmark_result=benchmark_result,
+        output_path=export_path,
+        timeout=timeout,
+        trials=trials,
+        tasks=tasks,
+        agents=agents,
+        elo_ratings=elo_ratings,
+    )
+
+
 @app.command("history")
 def benchmark_history(
     limit: int = typer.Option(10, "--limit", "-n", help="Number of past benchmarks to show"),
@@ -306,6 +344,7 @@ def benchmark_show(
 
     try:
         data = store.get_benchmark(benchmark_id)
+        elo_ratings = store.get_elo_ratings()
     finally:
         store.close()
 
@@ -353,9 +392,9 @@ def benchmark_show(
 
     if fmt == "markdown":
         import sys
-        sys.stdout.write(render_benchmark_markdown(bench, stats))
+        sys.stdout.write(render_benchmark_markdown(bench, stats, elo_ratings=elo_ratings))
     elif fmt == "html":
         import sys
-        sys.stdout.write(render_benchmark_html(bench, stats))
+        sys.stdout.write(render_benchmark_html(bench, stats, elo_ratings=elo_ratings))
     else:
-        render_benchmark_terminal(bench, stats, console)
+        render_benchmark_terminal(bench, stats, console, elo_ratings=elo_ratings)
