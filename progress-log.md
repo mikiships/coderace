@@ -480,3 +480,43 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 
 **Blockers:**
 - None.
+
+### D2: Statistical Analysis Module (`coderace/statistics.py`) ✅
+
+**Built:**
+- Added new module `coderace/statistics.py` using stdlib-only math/statistics:
+  - `TrialStats` dataclass for per `(task, agent)` multi-trial metrics.
+  - `AgentAggregateStats` dataclass for per-agent cross-task aggregates.
+  - `compute_trial_stats(...)`:
+    - mean/stddev score
+    - 95% CI (t-critical lookup for small samples, normal approx fallback)
+    - mean/stddev wall time
+    - mean/stddev cost
+    - pass rate (`score > 0`)
+    - consistency score (`1 - coefficient of variation`, clamped to `>=0`)
+  - `compute_aggregate_stats(...)`:
+    - aggregate mean score with CI
+    - win rate by per-task mean-score winners
+    - cost efficiency (`mean_score / mean_cost`)
+    - reliability (`not timed_out` and no `error`)
+
+**Tests:**
+- Added `tests/test_statistics.py` with 9 tests covering:
+  - 1-trial behavior
+  - 3-trial behavior
+  - 10-trial behavior
+  - all-zero score edge case
+  - single-agent aggregate edge case
+  - multi-agent task-level win rate
+  - reliability with timeout/error rows
+  - cost efficiency calculation
+  - CI width shrink check with more trials
+- Full suite validation:
+  - `python3 -m pytest`
+  - Result: **426 passed**
+
+**Next:**
+- D3: persistent ELO ratings + `coderace ratings` CLI + benchmark integration.
+
+**Blockers:**
+- None.
