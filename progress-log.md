@@ -604,3 +604,48 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 
 **Blockers:**
 - None.
+
+### D5: Version Bump + README + Changelog ✅
+
+**Built:**
+- Version updates:
+  - `pyproject.toml` -> `1.0.0`
+  - `coderace/__init__.py` -> `1.0.0`
+- Documentation updates:
+  - `README.md`:
+    - added `--trials` and `--export` benchmark usage
+    - added statistical report behavior (`CI`, consistency, reliability)
+    - added ELO ratings command usage (`coderace ratings`, `--json`, `--reset`)
+    - added standardized export JSON schema example
+  - `CHANGELOG.md`:
+    - added `1.0.0` release entry covering D1-D4 capabilities and integration coverage
+- Added additional integration/edge validation tests in `tests/test_benchmark_v1_integration.py`:
+  - full `--trials 3` + two-task + export + ELO persistence flow
+  - single-agent ELO edge case
+  - single-task/single-trial export edge case
+  - always-failing agent reliability edge case
+
+**Tests:**
+- Full suite validation:
+  - `python3 -m pytest`
+  - Result: **447 passed**
+- New tests added in this contract:
+  - `tests/test_benchmark_trials.py` (6)
+  - `tests/test_statistics.py` (9)
+  - `tests/test_elo.py` (11)
+  - `tests/test_export.py` (6)
+  - `tests/test_benchmark_v1_integration.py` (4)
+  - **Total new tests: 36**
+
+**Next:**
+- Contract complete.
+
+**Blockers:**
+- None.
+
+### v1.0 Contract Summary (D1-D5)
+
+- Deliverables completed in order: **D1, D2, D3, D4, D5**
+- Full test suite after each deliverable: passed
+- Final full suite status: **447 passed**
+- Version now: **1.0.0**

@@ -576,9 +576,15 @@ coderace benchmark --agents claude --difficulty easy,medium
 # Dry-run: see what would run without executing
 coderace benchmark --agents claude,codex --dry-run
 
+# Statistical mode: run repeated trials per pair
+coderace benchmark --agents claude,codex --tasks fibonacci,json-parser --trials 5
+
 # Save report to file
 coderace benchmark --agents claude,codex --output report.md
 coderace benchmark --agents claude,codex --output report.html
+
+# Export standardized JSON (shareable benchmark artifact)
+coderace benchmark --agents claude,codex --trials 5 --export benchmark.json
 ```
 
 ### Example Terminal Output
@@ -622,7 +628,70 @@ coderace benchmark show bench-20260227-143022
 | `--difficulty` | Filter by difficulty: `easy`, `medium`, `hard` | all |
 | `--timeout` | Per-task timeout in seconds | `300` |
 | `--parallel N` | Run N agents in parallel | `1` (sequential) |
+| `--trials N` | Repeat each `(task, agent)` pair N times | `1` |
 | `--dry-run` | List combinations without running | `false` |
 | `--format` | Output format: `terminal`, `markdown`, `html` | `terminal` |
 | `--output` | Save report to file | — |
+| `--export` | Write standardized benchmark JSON file | — |
 | `--no-save` | Skip saving results to the store | `false` |
+
+### Statistical Reports (`--trials > 1`)
+
+When `--trials` is greater than 1, benchmark reports switch to statistical mode:
+
+- Task cells show `mean score +/- stddev` (plus mean wall time)
+- Report includes `CI (95%)`, `Consistency`, and `Reliability` columns
+- Summary includes per-agent mean score, confidence interval, win rate, and reliability
+- ELO ratings are rendered at the bottom of terminal/markdown/html reports
+
+### ELO Ratings
+
+Every benchmark run updates persistent ELO ratings across all benchmark history.
+
+```bash
+# Show ratings
+coderace ratings
+
+# JSON output
+coderace ratings --json
+
+# Reset all ratings to 1500
+coderace ratings --reset
+```
+
+ELO rules:
+- Initial rating: `1500`
+- K-factor: `32`
+- Each task is treated as a round-robin set of pairwise matches
+- Winner per pair is based on higher mean trial score (draw when within 1 point)
+
+### Export Format (`--export`)
+
+`coderace benchmark --export benchmark.json` writes a standardized JSON artifact:
+
+```json
+{
+  "coderace_version": "1.0.0",
+  "benchmark_id": "bench-20260228-133000",
+  "timestamp": "2026-02-28T13:30:00Z",
+  "system": { "os": "...", "python": "...", "cpu": "..." },
+  "config": { "trials": 5, "timeout": 300, "tasks": ["..."], "agents": ["..."] },
+  "results": [
+    {
+      "task": "fibonacci",
+      "agent": "claude",
+      "trials": 5,
+      "mean_score": 87.5,
+      "stddev_score": 3.2,
+      "ci_95": [83.1, 91.9],
+      "mean_time": 45.2,
+      "mean_cost": 0.03,
+      "pass_rate": 1.0,
+      "consistency_score": 0.96,
+      "per_trial": []
+    }
+  ],
+  "elo_ratings": { "claude": 1523, "codex": 1488 },
+  "summary": {}
+}
+```

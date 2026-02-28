@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0] - 2026-02-28
+
+### Added
+
+- **Benchmark trials mode** — `coderace benchmark --trials N` now runs each `(task, agent)` pair repeatedly and stores each trial with `trial_number` in SQLite.
+- **Statistical benchmarking module** — New `coderace/statistics.py` computes per-pair and per-agent aggregates: mean/stddev, 95% confidence intervals, pass rate, consistency, win rate, cost efficiency, and reliability.
+- **Persistent ELO ratings** — New `coderace/elo.py` plus `elo_ratings` store table. Ratings update automatically after each benchmark using pairwise task outcomes and persist across runs.
+- **`coderace ratings` command** — View persistent ELO rankings, output as JSON (`--json`), and reset all ratings (`--reset`).
+- **Standardized benchmark export** — `coderace benchmark --export <path>` writes shareable JSON with run metadata, system info, per-trial details, aggregate stats, and current ELO ratings.
+- **Enhanced benchmark report rendering** — Multi-trial reports now show statistical columns (`mean +/- stddev`, CI, consistency, reliability) and include ELO ratings in terminal/markdown/html output.
+- **Integration and edge-case coverage for v1.0 flow** — Added tests for full `--trials 3` benchmark + export + ELO pipeline and edge cases (single trial/agent/task and always-failing agent).
+
 ## [0.7.0] - 2026-02-26
 
 ### Added
