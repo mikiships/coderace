@@ -118,3 +118,139 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 
 **Blockers:**
 - Environment restriction on writing `.git/index.lock` prevents committing from this session.
+
+---
+
+### D2: Scoring Engine Update ✅
+
+**Built:**
+- `coderace/types.py`
+  - Added verify-aware default scoring profile: tests=25%, verify=30%, exit=20%, lint=15%, time=5%, lines=5%
+  - Added `verify` alias support in scoring config (`verify -> verify_passed`)
+  - `Task.get_weights()` now selects verify-aware defaults when `verify_command` is present
+  - Added `verify_passed` to `ScoreBreakdown`
+- `coderace/scorer.py`
+  - Composite score now includes weighted verification contribution
+  - Maintains old default behavior for tasks without `verify_command`
+  - Uses missing-key-safe weight access for backward-compatible custom maps
+- `tests/test_scorer.py`
+  - Added tests for verify alias normalization, verify-aware default behavior, and no-verify legacy behavior
+- `tests/test_task.py`
+  - Added assertion that verify tasks pick verify-aware defaults when no custom scoring is provided
+
+**Tests:**
+- `./.venv/bin/pytest -q tests/test_scorer.py tests/test_task.py`
+- Result: **32 passed**
+
+**Next:**
+- D3 Benchmark report update: add conditional Verify column/output rendering across terminal, markdown, and HTML.
+
+**Blockers:**
+- None.
+
+---
+
+### D3: Benchmark Report Update ✅
+
+**Built:**
+- `coderace/benchmark.py`
+  - Extended `TaskAgentResult` with verification fields: `verify_applicable`, `verify_passed`, `verify_score`, `verify_output`
+  - Propagated verification results from `compute_score(...)` into benchmark run results (sequential + parallel paths)
+- `coderace/benchmark_report.py`
+  - Added conditional `Verify` column in terminal/markdown/HTML benchmark results tables when verification is present
+  - Added verification details sections in terminal/markdown/HTML
+  - Added output truncation to 20 lines for verification output details
+- `coderace/store.py`
+  - Extended `benchmark_results` persistence with verification fields
+  - Added migration-safe column backfill for existing databases (`ALTER TABLE` when needed)
+- `coderace/commands/benchmark.py`
+  - `benchmark show` now reconstructs verification fields from stored benchmark results
+- `tests/test_benchmark.py`
+  - Added report tests for Verify column visibility, details sections, and 20-line truncation
+  - Added storage roundtrip test for verification fields
+
+**Tests:**
+- `./.venv/bin/pytest -q tests/test_benchmark.py`
+- `./.venv/bin/pytest -q tests/test_store.py`
+- `./.venv/bin/pytest -q tests/test_cli_store_integration.py`
+- Result: **80 passed**
+
+**Next:**
+- D4 built-in tasks: add 6 new hard tasks with embedded verification suites and verify-aware scoring.
+
+**Blockers:**
+- Commit still blocked in this session due inability to write under `.git/`.
+
+---
+
+### D4: Six Hard Built-in Tasks with Verification Tests ✅
+
+**Built:**
+- Added six new built-in tasks under `coderace/builtins/tasks/`:
+  - `regex-engine.yaml`
+  - `lru-cache.yaml`
+  - `expression-evaluator.yaml`
+  - `url-router.yaml`
+  - `diff-algorithm.yaml`
+  - `task-scheduler.yaml`
+- Each task includes:
+  - `difficulty: hard`
+  - `test_command` for agent-authored tests
+  - `verify_command` + embedded `verify_files` suite
+  - verify-aware scoring weights (`tests=25, verify=30, exit=20, lint=15, time=5, lines=5`)
+- Updated `coderace/benchmark.py` difficulty filtering to read `difficulty` from built-in YAML with legacy fallback behavior.
+- Updated tests:
+  - `tests/test_builtins.py` expected built-ins list now includes all six new tasks
+  - `tests/test_benchmark.py` now asserts `--difficulty hard` includes all new verification tasks
+
+**Tests:**
+- `./.venv/bin/pytest -q tests/test_builtins.py`
+- `./.venv/bin/pytest -q tests/test_benchmark.py`
+- `./.venv/bin/pytest -q tests/test_tasks_cli.py`
+- Result: **62 passed**
+
+**Next:**
+- D5 docs + integration: README verification section, `tasks list` verification indicator, and end-to-end verify scoring integration tests.
+
+**Blockers:**
+- Commit still blocked in this session due inability to write under `.git/`.
+
+---
+
+### D5: Documentation + Final Tests ✅
+
+**Built:**
+- `README.md`
+  - Added a dedicated **Verification Tests** section with YAML examples and execution flow
+  - Documented verify-aware default scoring distribution
+  - Expanded built-in task table with all six new verification-backed tasks
+  - Added note that `coderace tasks list` exposes verification availability
+- `coderace/commands/tasks.py`
+  - `tasks list` now includes a `Verify` column (`yes` when `verify_command` exists)
+- New integration test coverage:
+  - `tests/test_verification_integration.py`
+    - End-to-end verify/no-verify scoring difference check
+    - End-to-end verify file overwrite behavior check
+- Updated CLI tests:
+  - `tests/test_tasks_cli.py` now asserts Verify column and verification-enabled built-ins appear in list output
+
+**Tests:**
+- `./.venv/bin/pytest -q tests/test_tasks_cli.py`
+- `./.venv/bin/pytest -q tests/test_verification_integration.py`
+- `./.venv/bin/pytest -q`
+- Result: **411 passed**
+
+**Next:**
+- No remaining contract deliverables for this pass.
+
+**Blockers:**
+- Commit still blocked in this session due inability to write under `.git/`.
+
+---
+
+### Verification Contract Summary (D1-D5)
+
+- Deliverables completed in this pass: **D2, D3, D4, D5**
+- D1 was already complete on branch (`560328b`)
+- Full test suite status after all changes: **411 passed**
+- Remaining blocker: this execution environment still cannot write under `.git/`, so per-deliverable commits could not be created from this session.

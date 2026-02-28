@@ -78,6 +78,10 @@ CREATE TABLE IF NOT EXISTS benchmark_results (
     exit_clean INTEGER NOT NULL,
     lint_clean INTEGER NOT NULL,
     timed_out INTEGER NOT NULL,
+    verify_applicable INTEGER NOT NULL DEFAULT 0,
+    verify_passed INTEGER NOT NULL DEFAULT 0,
+    verify_score REAL NOT NULL DEFAULT 0.0,
+    verify_output TEXT NOT NULL DEFAULT '',
     cost_usd REAL,
     error TEXT
 );
@@ -148,7 +152,49 @@ class ResultStore:
     def _ensure_tables(self) -> None:
         conn = self._get_conn()
         conn.executescript(_SCHEMA)
+        self._ensure_benchmark_result_columns(conn)
         conn.commit()
+
+    def _ensure_benchmark_result_columns(self, conn: sqlite3.Connection) -> None:
+        """Add benchmark verification columns to older DBs that predate D3."""
+        self._ensure_column(
+            conn,
+            "benchmark_results",
+            "verify_applicable",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            conn,
+            "benchmark_results",
+            "verify_passed",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            conn,
+            "benchmark_results",
+            "verify_score",
+            "REAL NOT NULL DEFAULT 0.0",
+        )
+        self._ensure_column(
+            conn,
+            "benchmark_results",
+            "verify_output",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+
+    def _ensure_column(
+        self,
+        conn: sqlite3.Connection,
+        table: str,
+        column: str,
+        column_def: str,
+    ) -> None:
+        columns = {
+            row["name"]
+            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}")
 
     def close(self) -> None:
         if self._conn is not None:
@@ -387,8 +433,9 @@ class ResultStore:
             conn.execute(
                 "INSERT INTO benchmark_results "
                 "(benchmark_id, task_name, agent, score, wall_time, tests_pass, "
-                "exit_clean, lint_clean, timed_out, cost_usd, error) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "exit_clean, lint_clean, timed_out, verify_applicable, verify_passed, "
+                "verify_score, verify_output, cost_usd, error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     benchmark_result.benchmark_id,
                     r.task_name,
@@ -399,6 +446,10 @@ class ResultStore:
                     1 if r.exit_clean else 0,
                     1 if r.lint_clean else 0,
                     1 if r.timed_out else 0,
+                    1 if r.verify_applicable else 0,
+                    1 if r.verify_passed else 0,
+                    r.verify_score,
+                    r.verify_output,
                     r.cost_usd,
                     r.error,
                 ),
@@ -454,6 +505,10 @@ class ResultStore:
                 "exit_clean": bool(r["exit_clean"]),
                 "lint_clean": bool(r["lint_clean"]),
                 "timed_out": bool(r["timed_out"]),
+                "verify_applicable": bool(r["verify_applicable"]),
+                "verify_passed": bool(r["verify_passed"]),
+                "verify_score": r["verify_score"],
+                "verify_output": r["verify_output"],
                 "cost_usd": r["cost_usd"],
                 "error": r["error"],
             }

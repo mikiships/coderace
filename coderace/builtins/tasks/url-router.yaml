@@ -1,0 +1,165 @@
+name: url-router
+difficulty: hard
+description: |
+  Implement an HTTP-style URL router in `url_router.py`.
+
+  Required public API:
+
+  - `class Router:`
+    - `add_route(method: str, pattern: str, handler: str, middleware: list[str] | None = None) -> None`
+    - `add_middleware(name: str) -> None`
+    - `resolve(method: str, path: str) -> dict`
+
+  `resolve(...)` must return a dict with keys:
+  - `status`: int (`200`, `404`, or `405`)
+  - `handler`: str | None
+  - `params`: dict[str, str]
+  - `middleware`: list[str]
+
+  Routing features:
+  - Path parameters: `/users/:id`
+  - Wildcards: `/files/*path`
+  - Method matching (GET/POST/PUT/etc.)
+  - Route specificity rules:
+    - static segment > param segment > wildcard segment
+  - 405 vs 404 behavior:
+    - 405 when path exists for another method
+    - 404 when no route pattern matches at all
+  - Middleware ordering:
+    - global middleware first, then route-level middleware
+
+  Create your own test file `test_url_router.py` and ensure it passes.
+  Do NOT modify files other than `url_router.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_url_router.py -x -q
+verify_command: python3 -m pytest verify_url_router.py -x -q
+verify_files:
+  verify_url_router.py: |
+    import pytest
+
+    from url_router import Router
+
+
+    def _build_router() -> Router:
+        router = Router()
+        router.add_middleware("auth")
+        router.add_middleware("trace")
+
+        router.add_route("GET", "/health", "health")
+        router.add_route("GET", "/users/new", "users_new")
+        router.add_route("GET", "/users/:id", "users_show")
+        router.add_route("PUT", "/users/:id", "users_update", middleware=["audit"])
+        router.add_route("GET", "/users/:id/settings", "users_settings")
+        router.add_route("GET", "/users/:id/posts/:post_id", "users_post")
+        router.add_route("POST", "/users", "users_create")
+        router.add_route("GET", "/files/*path", "files")
+        router.add_route("GET", "/assets/*path", "assets", middleware=["cache"])
+        return router
+
+
+    def _assert_shape(result: dict) -> None:
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"status", "handler", "params", "middleware"}
+        assert isinstance(result["status"], int)
+        assert isinstance(result["params"], dict)
+        assert isinstance(result["middleware"], list)
+
+
+    @pytest.mark.parametrize(
+        ("method", "path", "status", "handler", "params"),
+        [
+            ("GET", "/health", 200, "health", {}),
+            ("GET", "/users/new", 200, "users_new", {}),
+            ("GET", "/users/42", 200, "users_show", {"id": "42"}),
+            ("GET", "/users/alpha", 200, "users_show", {"id": "alpha"}),
+            ("PUT", "/users/42", 200, "users_update", {"id": "42"}),
+            ("GET", "/users/42/settings", 200, "users_settings", {"id": "42"}),
+            ("GET", "/users/42/posts/9", 200, "users_post", {"id": "42", "post_id": "9"}),
+            ("GET", "/files/a.txt", 200, "files", {"path": "a.txt"}),
+            ("GET", "/files/a/b/c.txt", 200, "files", {"path": "a/b/c.txt"}),
+            ("GET", "/assets/js/app.js", 200, "assets", {"path": "js/app.js"}),
+            ("POST", "/users", 200, "users_create", {}),
+            ("GET", "/users/new/settings", 200, "users_settings", {"id": "new"}),
+            ("GET", "/users/new/posts/1", 200, "users_post", {"id": "new", "post_id": "1"}),
+            ("GET", "/files/", 200, "files", {"path": ""}),
+            ("GET", "/assets/", 200, "assets", {"path": ""}),
+            ("GET", "/unknown", 404, None, {}),
+            ("DELETE", "/unknown", 404, None, {}),
+            ("DELETE", "/users/42", 405, None, {}),
+            ("POST", "/users/42", 405, None, {}),
+            ("GET", "/users", 405, None, {}),
+            ("PATCH", "/users", 405, None, {}),
+            ("POST", "/health", 405, None, {}),
+            ("HEAD", "/health", 405, None, {}),
+            ("PUT", "/files/a.txt", 405, None, {}),
+            ("POST", "/files/a.txt", 405, None, {}),
+            ("GET", "/users/42/unknown", 404, None, {}),
+            ("GET", "/users/42/posts", 404, None, {}),
+            ("GET", "/users/42/posts/9/edit", 404, None, {}),
+            ("GET", "/files", 404, None, {}),
+            ("GET", "/assets", 404, None, {}),
+            ("GET", "/health/live", 404, None, {}),
+            ("GET", "/users//settings", 404, None, {}),
+        ],
+    )
+    def test_route_resolution(method, path, status, handler, params):
+        router = _build_router()
+        result = router.resolve(method, path)
+        _assert_shape(result)
+        assert result["status"] == status
+        assert result["handler"] == handler
+        assert result["params"] == params
+
+
+    def test_static_route_wins_over_param_route() -> None:
+        router = _build_router()
+        result = router.resolve("GET", "/users/new")
+        assert result["status"] == 200
+        assert result["handler"] == "users_new"
+        assert result["params"] == {}
+
+
+    def test_param_route_wins_over_wildcard_for_specific_match() -> None:
+        router = Router()
+        router.add_route("GET", "/files/:name", "file_name")
+        router.add_route("GET", "/files/*path", "files")
+
+        result = router.resolve("GET", "/files/readme.md")
+        assert result["handler"] == "file_name"
+        assert result["params"] == {"name": "readme.md"}
+
+
+    def test_middleware_ordering_global_then_route() -> None:
+        router = _build_router()
+        result = router.resolve("PUT", "/users/42")
+        assert result["status"] == 200
+        assert result["middleware"] == ["auth", "trace", "audit"]
+
+
+    def test_middleware_for_plain_route_has_only_global() -> None:
+        router = _build_router()
+        result = router.resolve("GET", "/users/42")
+        assert result["middleware"] == ["auth", "trace"]
+
+
+    def test_405_vs_404_distinction() -> None:
+        router = _build_router()
+        method_error = router.resolve("DELETE", "/users/42")
+        not_found = router.resolve("DELETE", "/nope")
+        assert method_error["status"] == 405
+        assert not_found["status"] == 404
+lint_command: ruff check url_router.py
+timeout: 900
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

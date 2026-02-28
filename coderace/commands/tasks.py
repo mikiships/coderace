@@ -26,12 +26,15 @@ def list_tasks() -> None:
 
     table = Table(title="Built-in Tasks", show_lines=False)
     table.add_column("Name", style="cyan")
+    table.add_column("Verify", justify="center")
     table.add_column("Description")
 
     for name in names:
         data = load_builtin(name)
         desc = data.get("description", "").strip().split("\n")[0]
-        table.add_row(name, desc)
+        has_verify = bool(data.get("verify_command"))
+        verify_label = "[green]yes[/green]" if has_verify else "-"
+        table.add_row(name, verify_label, desc)
 
     console.print(table)
     console.print(f"\n[dim]Run a task: coderace run --builtin <name>[/dim]")

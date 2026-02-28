@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from coderace.task import create_template, load_task
-from coderace.types import Task
+from coderace.types import Task, VERIFY_AWARE_DEFAULT_WEIGHTS
 
 
 def test_load_valid_task(task_yaml: Path) -> None:
@@ -101,6 +101,7 @@ agents:
     assert task.verify_files == {
         "verify_tests.py": "def test_ok():\n  assert True\n"
     }
+    assert task.get_weights() == VERIFY_AWARE_DEFAULT_WEIGHTS
 
 
 def test_load_task_rejects_non_mapping_verify_files(tmp_path: Path) -> None:

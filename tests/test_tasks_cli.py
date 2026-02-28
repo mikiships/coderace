@@ -12,9 +12,12 @@ runner = CliRunner()
 def test_tasks_list() -> None:
     result = runner.invoke(app, ["tasks", "list"])
     assert result.exit_code == 0
+    assert "Verify" in result.output
+    assert "yes" in result.output
     assert "fibonacci" in result.output
     assert "json-parser" in result.output
     assert "binary-search-tree" in result.output
+    assert "regex-engine" in result.output
 
 
 def test_tasks_show_fibonacci() -> None:

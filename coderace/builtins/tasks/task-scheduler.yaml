@@ -1,0 +1,182 @@
+name: task-scheduler
+difficulty: hard
+description: |
+  Implement a dependency-aware priority task scheduler in `task_scheduler.py`.
+
+  Required public API:
+
+  - `class TaskScheduler:`
+    - `__init__(max_workers: int = 1)`
+    - `add_task(task_id: str, priority: int = 0, depends_on: list[str] | None = None, timeout: float | None = None) -> None`
+    - `run(executor) -> dict`
+
+  `run(executor)` requirements:
+  - `executor(task_id)` is called for each runnable task
+  - Return dict with keys:
+    - `order`: execution order list
+    - `completed`: list of task IDs that completed successfully
+    - `failed`: list of task IDs that failed (exception or blocked by failed deps)
+    - `timed_out`: list of task IDs that exceeded timeout
+  - Enforce DAG dependencies
+  - Detect cycles and raise `ValueError`
+  - Respect `max_workers` concurrency cap
+  - Among ready tasks, higher priority must run first (larger integer = higher priority)
+  - Handle per-task timeout
+
+  Create your own test file `test_task_scheduler.py` and ensure it passes.
+  Do NOT modify files other than `task_scheduler.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_task_scheduler.py -x -q
+verify_command: python3 -m pytest verify_task_scheduler.py -x -q
+verify_files:
+  verify_task_scheduler.py: |
+    import threading
+    import time
+
+    import pytest
+
+    from task_scheduler import TaskScheduler
+
+
+    def _assert_shape(result: dict) -> None:
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"order", "completed", "failed", "timed_out"}
+        assert isinstance(result["order"], list)
+        assert isinstance(result["completed"], list)
+        assert isinstance(result["failed"], list)
+        assert isinstance(result["timed_out"], list)
+
+
+    def _add_tasks(scheduler: TaskScheduler, tasks: list[tuple]) -> None:
+        for task_id, priority, deps, timeout in tasks:
+            scheduler.add_task(task_id, priority=priority, depends_on=deps, timeout=timeout)
+
+
+    @pytest.mark.parametrize(
+        ("tasks", "expected_first"),
+        [
+            ([("a", 1, [], None), ("b", 2, [], None), ("c", 3, [], None)], "c"),
+            ([("a", 5, [], None), ("b", 1, [], None), ("c", 2, [], None)], "a"),
+            ([("x", 0, [], None), ("y", 0, [], None), ("z", 1, [], None)], "z"),
+            ([("a", 10, [], None), ("b", 9, [], None)], "a"),
+            ([("a", -1, [], None), ("b", -2, [], None), ("c", -3, [], None)], "a"),
+            ([("job1", 100, [], None), ("job2", 10, [], None), ("job3", 1, [], None)], "job1"),
+            ([("p1", 3, [], None), ("p2", 4, [], None), ("p3", 5, [], None), ("p4", 2, [], None)], "p3"),
+            ([("a", 2, [], None), ("b", 2, [], None), ("c", 5, [], None)], "c"),
+            ([("m", 1, [], None), ("n", 50, [], None)], "n"),
+            ([("r", 7, [], None), ("s", 3, [], None), ("t", 6, [], None)], "r"),
+            ([("u", 4, [], None), ("v", 8, [], None), ("w", 8, [], None)], "v"),
+            ([("k1", 9, [], None), ("k2", 1, [], None), ("k3", 3, [], None), ("k4", 7, [], None)], "k1"),
+        ],
+    )
+    def test_priority_selection(tasks, expected_first) -> None:
+        scheduler = TaskScheduler(max_workers=1)
+        _add_tasks(scheduler, tasks)
+        result = scheduler.run(lambda task_id: task_id)
+        _assert_shape(result)
+        assert result["order"][0] == expected_first
+
+
+    @pytest.mark.parametrize(
+        ("tasks", "must_precede"),
+        [
+            ([("a", 1, [], None), ("b", 1, ["a"], None)], [("a", "b")]),
+            ([("a", 1, [], None), ("b", 1, ["a"], None), ("c", 1, ["b"], None)], [("a", "b"), ("b", "c")]),
+            ([("a", 1, [], None), ("b", 1, [], None), ("c", 1, ["a", "b"], None)], [("a", "c"), ("b", "c")]),
+            ([("root", 5, [], None), ("left", 1, ["root"], None), ("right", 1, ["root"], None)], [("root", "left"), ("root", "right")]),
+            ([("a", 2, [], None), ("b", 3, ["a"], None), ("c", 4, ["a"], None), ("d", 1, ["b", "c"], None)], [("a", "b"), ("a", "c"), ("b", "d"), ("c", "d")]),
+            ([("n1", 1, [], None), ("n2", 1, ["n1"], None), ("n3", 1, ["n1"], None), ("n4", 1, ["n2"], None)], [("n1", "n2"), ("n1", "n3"), ("n2", "n4")]),
+            ([("t1", 1, [], None), ("t2", 2, ["t1"], None), ("t3", 3, ["t2"], None), ("t4", 4, ["t1"], None)], [("t1", "t2"), ("t2", "t3"), ("t1", "t4")]),
+            ([("a", 5, [], None), ("b", 4, ["a"], None), ("c", 3, ["a"], None), ("d", 2, ["b"], None), ("e", 1, ["c"], None)], [("a", "b"), ("a", "c"), ("b", "d"), ("c", "e")]),
+            ([("base", 1, [], None), ("mid", 2, ["base"], None), ("top", 3, ["mid"], None)], [("base", "mid"), ("mid", "top")]),
+            ([("x", 1, [], None), ("y", 1, ["x"], None), ("z", 1, ["x", "y"], None)], [("x", "y"), ("x", "z"), ("y", "z")]),
+            ([("q1", 1, [], None), ("q2", 2, [], None), ("q3", 3, ["q1", "q2"], None)], [("q1", "q3"), ("q2", "q3")]),
+            ([("r1", 1, [], None), ("r2", 5, ["r1"], None), ("r3", 2, ["r1"], None), ("r4", 4, ["r2", "r3"], None)], [("r1", "r2"), ("r1", "r3"), ("r2", "r4"), ("r3", "r4")]),
+        ],
+    )
+    def test_dependency_ordering(tasks, must_precede) -> None:
+        scheduler = TaskScheduler(max_workers=2)
+        _add_tasks(scheduler, tasks)
+        result = scheduler.run(lambda task_id: task_id)
+        _assert_shape(result)
+        for before, after in must_precede:
+            assert result["order"].index(before) < result["order"].index(after)
+
+
+    def test_cycle_detection() -> None:
+        scheduler = TaskScheduler(max_workers=1)
+        scheduler.add_task("a", depends_on=["c"])
+        scheduler.add_task("b", depends_on=["a"])
+        scheduler.add_task("c", depends_on=["b"])
+        with pytest.raises(ValueError):
+            scheduler.run(lambda task_id: task_id)
+
+
+    def test_max_workers_parallel_limit_respected() -> None:
+        scheduler = TaskScheduler(max_workers=3)
+        for i in range(12):
+            scheduler.add_task(f"t{i}", priority=i)
+
+        lock = threading.Lock()
+        running = 0
+        max_running = 0
+
+        def executor(task_id: str) -> str:
+            nonlocal running, max_running
+            with lock:
+                running += 1
+                max_running = max(max_running, running)
+            time.sleep(0.02)
+            with lock:
+                running -= 1
+            return task_id
+
+        result = scheduler.run(executor)
+        _assert_shape(result)
+        assert max_running <= 3
+        assert len(result["completed"]) == 12
+
+
+    def test_timeout_handling_marks_task_timed_out() -> None:
+        scheduler = TaskScheduler(max_workers=1)
+        scheduler.add_task("slow", priority=1, timeout=0.03)
+        scheduler.add_task("after", priority=1, depends_on=["slow"])
+
+        def executor(task_id: str):
+            if task_id == "slow":
+                time.sleep(0.08)
+            return task_id
+
+        result = scheduler.run(executor)
+        _assert_shape(result)
+        assert "slow" in result["timed_out"]
+        assert "after" in result["failed"]
+        assert "after" not in result["completed"]
+
+
+    def test_priority_inversion_guard() -> None:
+        scheduler = TaskScheduler(max_workers=2)
+        scheduler.add_task("low", priority=1)
+        scheduler.add_task("high", priority=100)
+        scheduler.add_task("mid", priority=50)
+
+        result = scheduler.run(lambda task_id: task_id)
+        _assert_shape(result)
+        order = result["order"]
+        assert order.index("high") < order.index("mid")
+        assert order.index("mid") < order.index("low")
+lint_command: ruff check task_scheduler.py
+timeout: 1200
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

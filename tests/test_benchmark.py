@@ -119,6 +119,17 @@ class TestListBenchmarkTasks:
         all_tasks = list_benchmark_tasks()
         assert len(easy_medium) <= len(all_tasks)
 
+    def test_filter_hard_includes_new_verify_tasks(self):
+        hard_tasks = set(list_benchmark_tasks(difficulty=["hard"]))
+        assert {
+            "regex-engine",
+            "lru-cache",
+            "expression-evaluator",
+            "url-router",
+            "diff-algorithm",
+            "task-scheduler",
+        }.issubset(hard_tasks)
+
 
 # ---------------------------------------------------------------------------
 # D2: Aggregate statistics
@@ -140,6 +151,51 @@ def _make_sample_benchmark():
         benchmark_id="bench-test-001",
         agents=["claude", "codex"],
         tasks=["fibonacci", "json-parser"],
+        results=results,
+    )
+    br.finish()
+    return br
+
+
+def _make_verify_benchmark() -> BenchmarkResult:
+    """Build a benchmark containing verification-enabled task results."""
+    long_output = "\n".join([f"line-{i}" for i in range(1, 26)])
+    results = [
+        TaskAgentResult(
+            "regex-engine",
+            "claude",
+            score=92.0,
+            wall_time=11.0,
+            tests_pass=True,
+            exit_clean=True,
+            lint_clean=True,
+            timed_out=False,
+            verify_applicable=True,
+            verify_passed=True,
+            verify_score=100.0,
+            verify_output=long_output,
+            cost_usd=0.02,
+        ),
+        TaskAgentResult(
+            "regex-engine",
+            "codex",
+            score=74.0,
+            wall_time=12.0,
+            tests_pass=True,
+            exit_clean=True,
+            lint_clean=True,
+            timed_out=False,
+            verify_applicable=True,
+            verify_passed=False,
+            verify_score=0.0,
+            verify_output="assertion failed",
+            cost_usd=0.01,
+        ),
+    ]
+    br = BenchmarkResult(
+        benchmark_id="bench-verify-001",
+        agents=["claude", "codex"],
+        tasks=["regex-engine"],
         results=results,
     )
     br.finish()
@@ -336,6 +392,44 @@ class TestBenchmarkReports:
         md = render_benchmark_markdown(br, stats)
         assert "ERR" in md
 
+    def test_markdown_shows_verify_column_when_present(self):
+        br = _make_verify_benchmark()
+        stats = compute_benchmark_stats(br)
+        md = render_benchmark_markdown(br, stats)
+        assert "| Task | claude | codex | Verify |" in md
+        assert "50%" in md
+        assert "Verification Details" in md
+
+    def test_markdown_truncates_verify_output_to_20_lines(self):
+        br = _make_verify_benchmark()
+        stats = compute_benchmark_stats(br)
+        md = render_benchmark_markdown(br, stats)
+        assert "line-20" in md
+        assert "line-21" not in md
+        assert "... (+5 more lines)" in md
+
+    def test_terminal_shows_verify_column_when_present(self):
+        from rich.console import Console
+
+        br = _make_verify_benchmark()
+        stats = compute_benchmark_stats(br)
+        console = Console(no_color=True, record=True)
+        render_benchmark_terminal(br, stats, console)
+        out = console.export_text()
+        assert "Verify" in out
+        assert "verification details" in out.lower()
+
+    def test_html_shows_verify_column_when_present(self):
+        br = _make_verify_benchmark()
+        stats = compute_benchmark_stats(br)
+        html = render_benchmark_html(br, stats)
+        assert "<th>Verify</th>" in html
+        assert "Verification Details" in html
+
+    def test_markdown_omits_verify_column_without_verification(self):
+        md = render_benchmark_markdown(self.br, self.stats)
+        assert "| Task | claude | codex | Verify |" not in md
+
 
 # ---------------------------------------------------------------------------
 # D4: Storage
@@ -418,6 +512,33 @@ class TestBenchmarkStorage:
                 codex_json = results_map[("json-parser", "codex")]
                 assert codex_json["score"] == pytest.approx(90.0)
 
+                store.close()
+            finally:
+                del os.environ["CODERACE_DB"]
+
+    def test_benchmark_verify_fields_stored_correctly(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "test.db"
+            os.environ["CODERACE_DB"] = str(db_path)
+            try:
+                from coderace.store import ResultStore
+
+                store = ResultStore()
+                br = _make_verify_benchmark()
+                stats = compute_benchmark_stats(br)
+                store.save_benchmark(br, stats)
+
+                detail = store.get_benchmark("bench-verify-001")
+                results_map = {(r["task_name"], r["agent"]): r for r in detail["results"]}
+                claude = results_map[("regex-engine", "claude")]
+                codex = results_map[("regex-engine", "codex")]
+
+                assert claude["verify_applicable"] is True
+                assert claude["verify_passed"] is True
+                assert claude["verify_score"] == 100.0
+                assert "line-1" in claude["verify_output"]
+                assert codex["verify_passed"] is False
+                assert codex["verify_score"] == 0.0
                 store.close()
             finally:
                 del os.environ["CODERACE_DB"]

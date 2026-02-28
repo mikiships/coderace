@@ -76,6 +76,12 @@ description: |
 repo: .
 test_command: pytest tests/test_auth.py -x
 lint_command: ruff check .
+# Optional: independent verification suite written after agent completes
+# verify_command: python3 -m pytest verify_auth.py -x -q
+# verify_files:
+#   verify_auth.py: |
+#     def test_real_contract():
+#       assert True
 timeout: 300
 agents:
   - claude
@@ -102,6 +108,34 @@ For each agent in the task:
 | Lint clean | 15% | Did the lint command exit 0? |
 | Wall time | 15% | Faster is better (normalized across agents) |
 | Lines changed | 10% | Fewer is better (normalized across agents) |
+
+## Verification Tests
+
+For stronger evaluation, tasks can define an independent verification suite that the agent does not control.
+
+```yaml
+verify_command: python3 -m pytest verify_api_contract.py -x -q
+verify_files:
+  verify_api_contract.py: |
+    def test_contract_behavior():
+      assert True
+```
+
+Flow for verification-enabled tasks:
+1. Agent completes implementation.
+2. `test_command` runs (agent-authored tests).
+3. `verify_files` are written into the workspace (overwriting same-path files).
+4. `verify_command` runs.
+
+Default scoring when `verify_command` is present:
+- tests: 25%
+- verify: 30%
+- exit: 20%
+- lint: 15%
+- time: 5%
+- lines: 5%
+
+Tasks without `verify_command` keep the legacy default scoring (40/20/15/15/10).
 
 ## Output
 
@@ -142,6 +176,14 @@ coderace run --builtin fibonacci
 | `csv-analyzer` | Medium | CLI tool for CSV summary statistics |
 | `http-server` | Medium-Hard | HTTP/1.1 server using only stdlib socket |
 | `binary-search-tree` | Hard | AVL tree with insert, delete, search, and balancing |
+| `regex-engine` | Hard | Regex engine with custom matcher + verification suite |
+| `lru-cache` | Hard | Thread-safe LRU + TTL correctness verification |
+| `expression-evaluator` | Hard | Expression parser/evaluator with precedence and functions |
+| `url-router` | Hard | HTTP-style router with params, wildcard, and 405/404 logic |
+| `diff-algorithm` | Hard | Unified diff + patch application roundtrip checks |
+| `task-scheduler` | Hard | Dependency-aware priority scheduler with timeout handling |
+
+`coderace tasks list` now includes a `Verify` column so you can see which built-ins ship with verification suites.
 
 ## Try It Now
 

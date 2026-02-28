@@ -1,0 +1,154 @@
+name: regex-engine
+difficulty: hard
+description: |
+  Implement a small regular expression engine in `regex_engine.py`.
+
+  Required public API:
+
+  - `matches(pattern: str, text: str) -> bool`
+
+  You may optionally expose a `RegexEngine` class with a `.matches(...)` method,
+  but the `matches` function must exist and should perform a full-string match.
+
+  Required regex features:
+  - Wildcard: `.`
+  - Quantifiers: `*`, `+`, `?`
+  - Anchors: `^`, `$`
+  - Character classes: `[abc]`, `[a-z]`, `[^abc]`
+  - Alternation: `a|b` (including multi-character alternatives)
+
+  Correctness requirements:
+  - Full-string matching semantics (not substring matching)
+  - Backtracking behavior should be correct for nested/ambiguous patterns
+  - Empty-string and anchor edge cases must be handled
+  - Avoid catastrophic backtracking on provided adversarial input
+
+  Create your own test file `test_regex_engine.py` and ensure it passes.
+  Do NOT modify any files other than `regex_engine.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_regex_engine.py -x -q
+verify_command: python3 -m pytest verify_regex_engine.py -x -q
+verify_files:
+  verify_regex_engine.py: |
+    import importlib
+    import time
+
+    import pytest
+
+
+    def _resolve_matcher():
+        module = importlib.import_module("regex_engine")
+        if hasattr(module, "matches") and callable(module.matches):
+            return module.matches
+        if hasattr(module, "RegexEngine"):
+            engine = module.RegexEngine()
+            if hasattr(engine, "matches") and callable(engine.matches):
+                return engine.matches
+        raise AssertionError("regex_engine must define matches(pattern, text)")
+
+
+    _MATCH = _resolve_matcher()
+
+
+    def run_match(pattern: str, text: str) -> bool:
+        return bool(_MATCH(pattern, text))
+
+
+    @pytest.mark.parametrize(
+        ("pattern", "text", "expected"),
+        [
+            ("a", "a", True),
+            ("a", "b", False),
+            (".", "x", True),
+            ("..", "ab", True),
+            ("..", "a", False),
+            ("a*", "", True),
+            ("a*", "aaaa", True),
+            ("a*", "aaab", False),
+            ("a+", "", False),
+            ("a+", "a", True),
+            ("a+", "aaaa", True),
+            ("ab?", "a", True),
+            ("ab?", "ab", True),
+            ("ab?", "abb", False),
+            ("^abc$", "abc", True),
+            ("^abc$", "xabc", False),
+            ("^abc$", "abcx", False),
+            ("[abc]+", "abca", True),
+            ("[abc]+", "abcd", False),
+            ("[a-z]+", "hello", True),
+            ("[a-z]+", "Hello", False),
+            ("[^abc]+", "xyz", True),
+            ("[^abc]+", "abx", False),
+            ("a|b", "a", True),
+            ("a|b", "b", True),
+            ("a|b", "ab", False),
+            ("ab|cd", "ab", True),
+            ("ab|cd", "cd", True),
+            ("ab|cd", "ad", False),
+            ("^$", "", True),
+            ("^$", "a", False),
+            ("[0-9]+", "12345", True),
+            ("[0-9]+", "12a45", False),
+            ("colou?r", "color", True),
+            ("colou?r", "colour", True),
+            ("colou?r", "colouur", False),
+            ("h.+o", "hello", True),
+            ("h.+o", "ho", False),
+            ("h.*o", "ho", True),
+            ("h.*o", "helloooo", True),
+        ],
+    )
+    def test_regex_cases(pattern: str, text: str, expected: bool) -> None:
+        assert run_match(pattern, text) is expected
+
+
+    @pytest.mark.parametrize(
+        ("pattern", "text"),
+        [
+            ("a*", ""),
+            ("a?", ""),
+            ("a?", "a"),
+            ("[a-z]*", ""),
+            ("^$", ""),
+            ("[^a]*", ""),
+        ],
+    )
+    def test_empty_string_matching(pattern: str, text: str) -> None:
+        assert run_match(pattern, text) is True
+
+
+    def test_nested_quantifier_edges() -> None:
+        assert run_match("a+b?c*", "aa") is True
+        assert run_match("a+b?c*", "aabccc") is True
+        assert run_match("a+b?c*", "bc") is False
+        assert run_match("[a-c]+d?", "abcc") is True
+        assert run_match("[a-c]+d?", "abccd") is True
+        assert run_match("[a-c]+d?", "abccdd") is False
+
+
+    def test_backtracking_must_not_hang() -> None:
+        pattern = "a*a*a*a*a*a*a*a*b"
+        text = "a" * 150 + "b"
+
+        started = time.perf_counter()
+        matched = run_match(pattern, text)
+        elapsed = time.perf_counter() - started
+
+        assert matched is True
+        assert elapsed < 2.0, f"match took too long: {elapsed:.3f}s"
+lint_command: ruff check regex_engine.py
+timeout: 900
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

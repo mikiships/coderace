@@ -5,7 +5,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from coderace.types import DEFAULT_WEIGHTS, AgentResult, Score, ScoreBreakdown
+from coderace.types import (
+    DEFAULT_WEIGHTS,
+    VERIFY_AWARE_DEFAULT_WEIGHTS,
+    AgentResult,
+    Score,
+    ScoreBreakdown,
+)
 
 
 def run_command(cmd: str, cwd: Path, timeout: int = 120) -> tuple[int, str]:
@@ -83,6 +89,8 @@ def compute_score(
             verify_passed = False
             verify_score = 0.0
 
+    breakdown.verify_passed = verify_passed
+
     # Exit clean
     breakdown.exit_clean = result.exit_code == 0 and not result.timed_out
 
@@ -98,24 +106,41 @@ def compute_score(
     breakdown.wall_time = result.wall_time
     breakdown.lines_changed = diff_lines
 
-    # Use custom weights or defaults
-    w = weights if weights is not None else DEFAULT_WEIGHTS
+    # Use custom weights or defaults.
+    # Verification-aware defaults only apply when verify_command is configured.
+    if weights is None:
+        w = (
+            VERIFY_AWARE_DEFAULT_WEIGHTS
+            if verify_command
+            else DEFAULT_WEIGHTS
+        )
+    else:
+        w = weights
 
     # Compute composite
     composite = 0.0
 
     # Boolean metrics
-    composite += w["tests_pass"] * (100.0 if breakdown.tests_pass else 0.0)
-    composite += w["exit_clean"] * (100.0 if breakdown.exit_clean else 0.0)
-    composite += w["lint_clean"] * (100.0 if breakdown.lint_clean else 0.0)
+    composite += w.get("tests_pass", 0.0) * (
+        100.0 if breakdown.tests_pass else 0.0
+    )
+    composite += w.get("verify_passed", 0.0) * (
+        100.0 if breakdown.verify_passed else 0.0
+    )
+    composite += w.get("exit_clean", 0.0) * (
+        100.0 if breakdown.exit_clean else 0.0
+    )
+    composite += w.get("lint_clean", 0.0) * (
+        100.0 if breakdown.lint_clean else 0.0
+    )
 
     # Wall time: normalize (lower is better)
-    composite += w["wall_time"] * _normalize_lower_better(
+    composite += w.get("wall_time", 0.0) * _normalize_lower_better(
         result.wall_time, all_wall_times
     )
 
     # Lines changed: normalize (fewer is better)
-    composite += w["lines_changed"] * _normalize_lower_better(
+    composite += w.get("lines_changed", 0.0) * _normalize_lower_better(
         float(diff_lines), [float(x) for x in all_diff_lines]
     )
 

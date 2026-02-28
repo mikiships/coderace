@@ -16,11 +16,23 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "lines_changed": 0.10,
 }
 
-VALID_WEIGHT_KEYS = frozenset(DEFAULT_WEIGHTS.keys())
+VERIFY_AWARE_DEFAULT_WEIGHTS: dict[str, float] = {
+    "tests_pass": 0.25,
+    "verify_passed": 0.30,
+    "exit_clean": 0.20,
+    "lint_clean": 0.15,
+    "wall_time": 0.05,
+    "lines_changed": 0.05,
+}
+
+VALID_WEIGHT_KEYS = frozenset(DEFAULT_WEIGHTS.keys()) | frozenset(
+    VERIFY_AWARE_DEFAULT_WEIGHTS.keys()
+)
 
 # Aliases for YAML convenience (short name -> canonical name)
 WEIGHT_ALIASES: dict[str, str] = {
     "tests": "tests_pass",
+    "verify": "verify_passed",
     "exit": "exit_clean",
     "lint": "lint_clean",
     "time": "wall_time",
@@ -112,6 +124,8 @@ class Task:
         """Return normalized scoring weights (custom or defaults)."""
         if self.scoring is not None:
             return normalize_weights(self.scoring)
+        if self.verify_command:
+            return dict(VERIFY_AWARE_DEFAULT_WEIGHTS)
         return dict(DEFAULT_WEIGHTS)
 
 
@@ -133,6 +147,7 @@ class ScoreBreakdown:
     """Per-metric scores before weighting."""
 
     tests_pass: bool = False
+    verify_passed: bool = False
     exit_clean: bool = False
     lint_clean: bool = False
     wall_time: float = 0.0

@@ -260,6 +260,10 @@ def benchmark_show(
             exit_clean=r["exit_clean"],
             lint_clean=r["lint_clean"],
             timed_out=r["timed_out"],
+            verify_applicable=r.get("verify_applicable", False),
+            verify_passed=r.get("verify_passed", False),
+            verify_score=r.get("verify_score", 0.0),
+            verify_output=r.get("verify_output", ""),
             cost_usd=r.get("cost_usd"),
             error=r.get("error"),
         ))

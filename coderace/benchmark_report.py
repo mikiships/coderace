@@ -13,6 +13,62 @@ from coderace.benchmark import BenchmarkResult
 from coderace.benchmark_stats import BenchmarkStats
 
 
+def _has_verification(result: BenchmarkResult) -> bool:
+    return any(r.verify_applicable for r in result.results)
+
+
+def _task_verify_percentage(
+    result: BenchmarkResult,
+    task_name: str,
+    lookup: dict[tuple[str, str], object],
+) -> str:
+    applicable = 0
+    passed = 0
+    for agent in result.agents:
+        entry = lookup.get((task_name, agent))
+        if not entry or not entry.verify_applicable:
+            continue
+        applicable += 1
+        if entry.verify_passed:
+            passed += 1
+    if applicable == 0:
+        return "-"
+    pct = int(round(passed / applicable * 100))
+    return f"{pct}%"
+
+
+def _truncate_output(output: str, max_lines: int = 20) -> str:
+    if not output:
+        return ""
+    lines = output.splitlines()
+    if len(lines) <= max_lines:
+        return "\n".join(lines)
+    hidden = len(lines) - max_lines
+    return "\n".join(lines[:max_lines] + [f"... (+{hidden} more lines)"])
+
+
+def _verify_details_rows(
+    result: BenchmarkResult,
+    lookup: dict[tuple[str, str], object],
+) -> list[tuple[str, str, str, str]]:
+    rows: list[tuple[str, str, str, str]] = []
+    for task_name in result.tasks:
+        for agent in result.agents:
+            entry = lookup.get((task_name, agent))
+            if not entry or not entry.verify_applicable:
+                continue
+            verify_pct = f"{int(round(entry.verify_score))}%"
+            rows.append(
+                (
+                    task_name,
+                    agent,
+                    verify_pct,
+                    _truncate_output(entry.verify_output),
+                )
+            )
+    return rows
+
+
 def render_benchmark_terminal(
     result: BenchmarkResult,
     stats: BenchmarkStats,
@@ -23,6 +79,7 @@ def render_benchmark_terminal(
 
     agents = result.agents
     tasks = result.tasks
+    has_verify = _has_verification(result)
 
     # Lookup: (task, agent) -> TaskAgentResult
     lookup = {(r.task_name, r.agent): r for r in result.results}
@@ -32,6 +89,8 @@ def render_benchmark_terminal(
     table.add_column("Task", style="bold")
     for agent in agents:
         table.add_column(agent, justify="center")
+    if has_verify:
+        table.add_column("Verify", justify="center")
 
     for task_name in tasks:
         row = [task_name]
@@ -47,6 +106,8 @@ def render_benchmark_terminal(
                 score_str = f"{r.score:.1f}"
                 time_str = f"({r.wall_time:.0f}s)"
                 row.append(f"[green]{score_str}[/green] [dim]{time_str}[/dim]")
+        if has_verify:
+            row.append(_task_verify_percentage(result, task_name, lookup))
         table.add_row(*row)
 
     # Summary rows
@@ -57,6 +118,8 @@ def render_benchmark_terminal(
     for agent in agents:
         s = agent_stat_map.get(agent)
         total_row.append(f"[bold]{s.total_score:.1f}[/bold]" if s else "-")
+    if has_verify:
+        total_row.append("-")
     table.add_row(*total_row)
 
     # Win rate row
@@ -68,6 +131,8 @@ def render_benchmark_terminal(
             win_row.append(f"{pct}%")
         else:
             win_row.append("-")
+    if has_verify:
+        win_row.append("-")
     table.add_row(*win_row)
 
     # Avg time row
@@ -75,6 +140,8 @@ def render_benchmark_terminal(
     for agent in agents:
         s = agent_stat_map.get(agent)
         time_row.append(f"{s.avg_time:.1f}s" if s else "-")
+    if has_verify:
+        time_row.append("-")
     table.add_row(*time_row)
 
     # Total cost row
@@ -85,6 +152,8 @@ def render_benchmark_terminal(
             cost_row.append(f"${s.total_cost:.4f}")
         else:
             cost_row.append("-")
+    if has_verify:
+        cost_row.append("-")
     table.add_row(*cost_row)
 
     console.print(table)
@@ -96,6 +165,19 @@ def render_benchmark_terminal(
                       f"(total score: {winner.total_score:.1f}, "
                       f"{winner.win_count}/{winner.task_count} task wins)")
 
+    if has_verify:
+        details = _verify_details_rows(result, lookup)
+        if details:
+            verify_table = Table(title="verification details", show_lines=True, expand=False)
+            verify_table.add_column("Task", style="bold")
+            verify_table.add_column("Agent", style="cyan")
+            verify_table.add_column("Verify", justify="center")
+            verify_table.add_column("Output")
+            for task_name, agent, verify_pct, output in details:
+                verify_table.add_row(task_name, agent, verify_pct, output or "-")
+            console.print()
+            console.print(verify_table)
+
 
 def render_benchmark_markdown(
     result: BenchmarkResult,
@@ -106,6 +188,7 @@ def render_benchmark_markdown(
     tasks = result.tasks
     lookup = {(r.task_name, r.agent): r for r in result.results}
     agent_stat_map = {s.agent: s for s in stats.agent_stats}
+    has_verify = _has_verification(result)
 
     lines: list[str] = []
     lines.append("# coderace Benchmark Results\n")
@@ -113,8 +196,11 @@ def render_benchmark_markdown(
     lines.append(f"Benchmark ID: `{result.benchmark_id}`\n")
 
     # Header row
-    header = "| Task | " + " | ".join(agents) + " |"
-    separator = "|------|" + "|".join(["------"] * len(agents)) + "|"
+    header_cells = ["Task", *agents]
+    if has_verify:
+        header_cells.append("Verify")
+    header = "| " + " | ".join(header_cells) + " |"
+    separator = "|" + "|".join(["------"] * len(header_cells)) + "|"
     lines.append(header)
     lines.append(separator)
 
@@ -130,16 +216,20 @@ def render_benchmark_markdown(
                 cells.append("TIMEOUT")
             else:
                 cells.append(f"{r.score:.1f} ({r.wall_time:.0f}s)")
+        if has_verify:
+            cells.append(_task_verify_percentage(result, task_name, lookup))
         lines.append("| " + " | ".join(cells) + " |")
 
     # Summary separator
-    lines.append("|------|" + "|".join(["------"] * len(agents)) + "|")
+    lines.append(separator)
 
     # Total
     total_cells = ["**TOTAL**"]
     for agent in agents:
         s = agent_stat_map.get(agent)
         total_cells.append(f"**{s.total_score:.1f}**" if s else "-")
+    if has_verify:
+        total_cells.append("-")
     lines.append("| " + " | ".join(total_cells) + " |")
 
     # Win rate
@@ -151,6 +241,8 @@ def render_benchmark_markdown(
             win_cells.append(f"{pct}%")
         else:
             win_cells.append("-")
+    if has_verify:
+        win_cells.append("-")
     lines.append("| " + " | ".join(win_cells) + " |")
 
     # Avg time
@@ -158,6 +250,8 @@ def render_benchmark_markdown(
     for agent in agents:
         s = agent_stat_map.get(agent)
         time_cells.append(f"{s.avg_time:.1f}s" if s else "-")
+    if has_verify:
+        time_cells.append("-")
     lines.append("| " + " | ".join(time_cells) + " |")
 
     # Total cost
@@ -168,6 +262,8 @@ def render_benchmark_markdown(
             cost_cells.append(f"${s.total_cost:.4f}")
         else:
             cost_cells.append("-")
+    if has_verify:
+        cost_cells.append("-")
     lines.append("| " + " | ".join(cost_cells) + " |")
 
     lines.append("")
@@ -185,6 +281,19 @@ def render_benchmark_markdown(
             )
         lines.append("")
 
+    if has_verify:
+        details = _verify_details_rows(result, lookup)
+        if details:
+            lines.append("## Verification Details\n")
+            lines.append("| Task | Agent | Verify | Output |")
+            lines.append("|------|-------|--------|--------|")
+            for task_name, agent, verify_pct, output in details:
+                safe_output = (output or "-").replace("|", "\\|").replace("\n", "<br>")
+                lines.append(
+                    f"| {task_name} | {agent} | {verify_pct} | {safe_output} |"
+                )
+            lines.append("")
+
     return "\n".join(lines)
 
 
@@ -197,6 +306,7 @@ def render_benchmark_html(
     tasks = result.tasks
     lookup = {(r.task_name, r.agent): r for r in result.results}
     agent_stat_map = {s.agent: s for s in stats.agent_stats}
+    has_verify = _has_verification(result)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     def esc(s: str) -> str:
@@ -217,6 +327,10 @@ def render_benchmark_html(
             else:
                 cls = "pass" if r.score >= 50 else "fail"
                 task_rows += f"<td class='{cls}'>{r.score:.1f}<br><small>({r.wall_time:.0f}s)</small></td>"
+        if has_verify:
+            verify = _task_verify_percentage(result, task_name, lookup)
+            verify_cls = "pass" if verify == "100%" else ("fail" if verify == "0%" else "")
+            task_rows += f"<td class='{verify_cls}'>{esc(verify)}</td>"
         task_rows += "</tr>\n"
 
     # Summary rows
@@ -247,8 +361,32 @@ def render_benchmark_html(
         else:
             cost_cells += "<td>-</td>"
 
+    summary_verify_cell = "<td>-</td>" if has_verify else ""
+
     agent_headers = "".join(f"<th>{esc(a)}</th>" for a in agents)
+    verify_header = "<th>Verify</th>" if has_verify else ""
     winner = stats.agent_stats[0].agent if stats.agent_stats else "-"
+
+    verify_details_section = ""
+    if has_verify:
+        detail_rows = ""
+        for task_name, agent, verify_pct, output in _verify_details_rows(result, lookup):
+            css = "pass" if verify_pct == "100%" else ("fail" if verify_pct == "0%" else "")
+            formatted_output = esc(output or "-").replace("\n", "<br>")
+            detail_rows += (
+                f"<tr><td class='task'>{esc(task_name)}</td><td>{esc(agent)}</td>"
+                f"<td class='{css}'>{esc(verify_pct)}</td><td><code>{formatted_output}</code></td></tr>\n"
+            )
+        if detail_rows:
+            verify_details_section = f"""
+<h2>Verification Details</h2>
+<table>
+<thead><tr><th>Task</th><th>Agent</th><th>Verify</th><th>Output</th></tr></thead>
+<tbody>
+{detail_rows}
+</tbody>
+</table>
+"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -282,15 +420,16 @@ def render_benchmark_html(
 </div>
 <h2>Results</h2>
 <table>
-<thead><tr><th>Task</th>{agent_headers}</tr></thead>
+<thead><tr><th>Task</th>{agent_headers}{verify_header}</tr></thead>
 <tbody>
 {task_rows}
-<tr class="summary"><td>TOTAL</td>{total_cells}</tr>
-<tr class="summary"><td>Win Rate</td>{win_cells}</tr>
-<tr class="summary"><td>Avg Time</td>{time_cells}</tr>
-<tr class="summary"><td>Total Cost</td>{cost_cells}</tr>
+<tr class="summary"><td>TOTAL</td>{total_cells}{summary_verify_cell}</tr>
+<tr class="summary"><td>Win Rate</td>{win_cells}{summary_verify_cell}</tr>
+<tr class="summary"><td>Avg Time</td>{time_cells}{summary_verify_cell}</tr>
+<tr class="summary"><td>Total Cost</td>{cost_cells}{summary_verify_cell}</tr>
 </tbody>
 </table>
+{verify_details_section}
 </body>
 </html>
 """

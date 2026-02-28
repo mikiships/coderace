@@ -19,6 +19,10 @@ class TaskAgentResult:
     exit_clean: bool
     lint_clean: bool
     timed_out: bool
+    verify_applicable: bool = False
+    verify_passed: bool = False
+    verify_score: float = 0.0
+    verify_output: str = ""
     cost_usd: Optional[float] = None
     error: Optional[str] = None  # error message if run failed entirely
 
@@ -294,6 +298,10 @@ def _run_single_agent(
             exit_clean=score.breakdown.exit_clean,
             lint_clean=score.breakdown.lint_clean,
             timed_out=agent_result.timed_out,
+            verify_applicable=bool(task.verify_command),
+            verify_passed=score.verify_passed,
+            verify_score=score.verify_score,
+            verify_output=score.verify_output,
             cost_usd=cost_usd,
         )
     except Exception as exc:
@@ -413,6 +421,10 @@ def _run_task_parallel(
                 exit_clean=score.breakdown.exit_clean,
                 lint_clean=score.breakdown.lint_clean,
                 timed_out=agent_result.timed_out,
+                verify_applicable=bool(task.verify_command),
+                verify_passed=score.verify_passed,
+                verify_score=score.verify_score,
+                verify_output=score.verify_output,
                 cost_usd=cost_usd,
             )
         except Exception as exc:
@@ -440,11 +452,11 @@ def _run_task_parallel(
 def list_benchmark_tasks(difficulty: list[str] | None = None) -> list[str]:
     """Return available benchmark task names, optionally filtered by difficulty.
 
-    Since built-in task YAMLs don't have a difficulty field, we use a static map.
+    Uses `difficulty` from built-in task YAML when present, with legacy fallbacks.
     """
-    from coderace.builtins import list_builtins
+    from coderace.builtins import list_builtins, load_builtin
 
-    _DIFFICULTY_MAP: dict[str, str] = {
+    legacy_difficulty_map: dict[str, str] = {
         "fibonacci": "easy",
         "binary-search-tree": "medium",
         "json-parser": "medium",
@@ -458,4 +470,18 @@ def list_benchmark_tasks(difficulty: list[str] | None = None) -> list[str]:
         return all_tasks
 
     difficulty_set = {d.lower() for d in difficulty}
-    return [t for t in all_tasks if _DIFFICULTY_MAP.get(t, "medium") in difficulty_set]
+    filtered: list[str] = []
+    for task_name in all_tasks:
+        try:
+            data = load_builtin(task_name)
+            task_difficulty = str(
+                data.get(
+                    "difficulty",
+                    legacy_difficulty_map.get(task_name, "medium"),
+                )
+            ).lower()
+        except Exception:
+            task_difficulty = legacy_difficulty_map.get(task_name, "medium")
+        if task_difficulty in difficulty_set:
+            filtered.append(task_name)
+    return filtered

@@ -1,0 +1,179 @@
+name: lru-cache
+difficulty: hard
+description: |
+  Implement a thread-safe LRU cache in `lru_cache.py`.
+
+  Required public API:
+
+  - `class LRUCache:`
+    - `__init__(capacity: int, ttl: float | None = None)`
+    - `put(key, value, ttl: float | None = None) -> None`
+    - `get(key, default=None)`
+    - `__len__() -> int`
+
+  Behavior requirements:
+  - O(1)-style cache operations (hash map + linked list design expected)
+  - Least-recently-used eviction when capacity is exceeded
+  - Accessing an item via `get` marks it as recently used
+  - TTL support:
+    - Cache-level default TTL from constructor
+    - Optional per-item TTL override in `put`
+    - Expired items must behave as missing
+  - Thread safety under concurrent `put`/`get`
+
+  Create your own test file `test_lru_cache.py` and ensure it passes.
+  Do NOT modify files other than `lru_cache.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_lru_cache.py -x -q
+verify_command: python3 -m pytest verify_lru_cache.py -x -q
+verify_files:
+  verify_lru_cache.py: |
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    import pytest
+
+    from lru_cache import LRUCache
+
+
+    def _run_ops(cache: LRUCache, ops: list[tuple]):
+        out = []
+        for op in ops:
+            kind = op[0]
+            if kind == "put":
+                if len(op) == 4:
+                    cache.put(op[1], op[2], ttl=op[3])
+                else:
+                    cache.put(op[1], op[2])
+            elif kind == "get":
+                out.append(cache.get(op[1]))
+            else:
+                raise AssertionError(f"unknown op: {kind}")
+        return out
+
+
+    def test_basic_put_get() -> None:
+        cache = LRUCache(capacity=2)
+        cache.put("a", 1)
+        cache.put("b", 2)
+        assert cache.get("a") == 1
+        assert cache.get("b") == 2
+        assert cache.get("missing") is None
+
+
+    @pytest.mark.parametrize(
+        ("capacity", "ops", "checks"),
+        [
+            (2, [("put", "a", 1), ("put", "b", 2), ("put", "c", 3)], {"a": None, "b": 2, "c": 3}),
+            (2, [("put", "a", 1), ("put", "b", 2), ("get", "a"), ("put", "c", 3)], {"a": 1, "b": None, "c": 3}),
+            (2, [("put", 1, "x"), ("put", 2, "y"), ("put", 3, "z")], {1: None, 2: "y", 3: "z"}),
+            (3, [("put", "a", 1), ("put", "b", 2), ("put", "c", 3), ("put", "d", 4)], {"a": None, "b": 2, "c": 3, "d": 4}),
+            (3, [("put", "a", 1), ("put", "b", 2), ("put", "c", 3), ("get", "a"), ("put", "d", 4)], {"a": 1, "b": None, "c": 3, "d": 4}),
+            (3, [("put", "a", 1), ("put", "b", 2), ("get", "a"), ("get", "b"), ("put", "c", 3), ("put", "d", 4)], {"a": 1, "b": 2, "c": None, "d": 4}),
+            (2, [("put", "a", 1), ("put", "a", 9), ("put", "b", 2)], {"a": 9, "b": 2}),
+            (2, [("put", "a", 1), ("put", "b", 2), ("put", "a", 5), ("put", "c", 3)], {"a": 5, "b": None, "c": 3}),
+            (4, [("put", "a", 1), ("put", "b", 2), ("put", "c", 3), ("put", "d", 4), ("put", "e", 5)], {"a": None, "b": 2, "c": 3, "d": 4, "e": 5}),
+            (1, [("put", "a", 1), ("put", "b", 2)], {"a": None, "b": 2}),
+            (1, [("put", "a", 1), ("put", "a", 2)], {"a": 2}),
+            (5, [("put", i, i * 10) for i in range(7)], {0: None, 1: None, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60}),
+        ],
+    )
+    def test_capacity_overflow_ordering(capacity, ops, checks) -> None:
+        cache = LRUCache(capacity=capacity)
+        _run_ops(cache, ops)
+        for key, expected in checks.items():
+            assert cache.get(key) == expected
+        assert len(cache) <= capacity
+
+
+    @pytest.mark.parametrize(
+        ("ttl", "sleep_for", "expected_alive"),
+        [
+            (0.05, 0.00, True),
+            (0.05, 0.01, True),
+            (0.05, 0.03, True),
+            (0.05, 0.06, False),
+            (0.05, 0.08, False),
+            (0.10, 0.00, True),
+            (0.10, 0.04, True),
+            (0.10, 0.09, True),
+            (0.10, 0.12, False),
+            (0.20, 0.05, True),
+            (0.20, 0.19, True),
+            (0.20, 0.22, False),
+        ],
+    )
+    def test_default_ttl_precision(ttl: float, sleep_for: float, expected_alive: bool) -> None:
+        cache = LRUCache(capacity=2, ttl=ttl)
+        cache.put("k", "v")
+        time.sleep(sleep_for)
+        alive = cache.get("k") is not None
+        assert alive is expected_alive
+
+
+    def test_per_item_ttl_override() -> None:
+        cache = LRUCache(capacity=3, ttl=1.0)
+        cache.put("short", 1, ttl=0.05)
+        cache.put("long", 2, ttl=0.5)
+        time.sleep(0.08)
+        assert cache.get("short") is None
+        assert cache.get("long") == 2
+
+
+    def test_concurrent_access_correctness() -> None:
+        cache = LRUCache(capacity=50, ttl=0.5)
+
+        def worker(i: int) -> int:
+            key = f"k{i % 20}"
+            cache.put(key, i)
+            value = cache.get(key)
+            return 0 if value is None else 1
+
+        with ThreadPoolExecutor(max_workers=16) as ex:
+            results = list(ex.map(worker, range(800)))
+
+        assert sum(results) > 700
+        assert len(cache) <= 50
+
+
+    def test_thread_safety_under_contention() -> None:
+        cache = LRUCache(capacity=8)
+
+        def write_heavy(i: int) -> None:
+            cache.put(i % 10, i)
+            _ = cache.get((i + 3) % 10)
+
+        with ThreadPoolExecutor(max_workers=24) as ex:
+            list(ex.map(write_heavy, range(2000)))
+
+        assert len(cache) <= 8
+        # Most recent keys should still be retrievable as integers or None if evicted.
+        for key in range(10):
+            value = cache.get(key)
+            assert value is None or isinstance(value, int)
+
+
+    def test_expired_keys_do_not_block_new_inserts() -> None:
+        cache = LRUCache(capacity=2, ttl=0.05)
+        cache.put("a", 1)
+        cache.put("b", 2)
+        time.sleep(0.07)
+        cache.put("c", 3)
+        assert cache.get("a") is None
+        assert cache.get("b") is None
+        assert cache.get("c") == 3
+lint_command: ruff check lru_cache.py
+timeout: 900
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5

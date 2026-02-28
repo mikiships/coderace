@@ -1,0 +1,163 @@
+name: diff-algorithm
+difficulty: hard
+description: |
+  Implement a Myers-style unified diff algorithm in `diff_algorithm.py`.
+
+  Required public API:
+
+  - `unified_diff(old_lines: list[str], new_lines: list[str], context: int = 3) -> str`
+  - `apply_unified_diff(old_lines: list[str], diff_text: str) -> list[str]`
+
+  Requirements:
+  - Unified diff output with headers (`---`, `+++`, `@@` hunks)
+  - Handle insertions, deletions, and modifications
+  - Produce compact/minimal edit hunks
+  - Support large inputs efficiently (1000+ lines)
+  - Preserve binary-like line content (including null bytes in strings)
+  - Applying generated patch should reconstruct the new content
+
+  Create your own test file `test_diff_algorithm.py` and ensure it passes.
+  Do NOT modify files other than `diff_algorithm.py` and your test file.
+repo: .
+test_command: python3 -m pytest test_diff_algorithm.py -x -q
+verify_command: python3 -m pytest verify_diff_algorithm.py -x -q
+verify_files:
+  verify_diff_algorithm.py: |
+    import random
+
+    import pytest
+
+    from diff_algorithm import apply_unified_diff, unified_diff
+
+
+    @pytest.mark.parametrize(
+        ("old", "new"),
+        [
+            (["a\n"], ["a\n"]),
+            (["a\n"], ["b\n"]),
+            (["a\n", "b\n"], ["a\n", "b\n", "c\n"]),
+            (["a\n", "b\n", "c\n"], ["a\n", "c\n"]),
+            (["a\n", "b\n", "c\n"], ["x\n", "b\n", "c\n"]),
+            (["a\n", "b\n", "c\n"], ["a\n", "x\n", "c\n"]),
+            (["a\n", "b\n", "c\n"], ["a\n", "b\n", "x\n"]),
+            ([], ["new\n"]),
+            (["gone\n"], []),
+            (["1\n", "2\n", "3\n"], ["1\n", "3\n"]),
+            (["1\n", "3\n"], ["1\n", "2\n", "3\n"]),
+            (["A\n", "B\n", "C\n"], ["A\n", "X\n", "C\n"]),
+            (["A\n", "B\n", "C\n"], ["A\n", "B\n", "C\n", "D\n"]),
+            (["A\n", "B\n", "C\n", "D\n"], ["A\n", "B\n", "D\n"]),
+            (["aa\n", "bb\n"], ["aa\n", "bb\n", "cc\n", "dd\n"]),
+            (["aa\n", "bb\n", "cc\n"], ["aa\n"]),
+            (["same\n"] * 5, ["same\n"] * 5),
+            (["x\n"] * 5, ["y\n"] * 5),
+            (["left\n", "right\n"], ["left\n", "middle\n", "right\n"]),
+            (["left\n", "middle\n", "right\n"], ["left\n", "right\n"]),
+            (["k1\n", "k2\n", "k3\n", "k4\n"], ["k1\n", "k3\n", "k4\n", "k5\n"]),
+            (["m\n", "n\n", "o\n"], ["m\n", "n\n", "o\n", "p\n", "q\n"]),
+            (["m\n", "n\n", "o\n", "p\n"], ["n\n", "o\n", "p\n"]),
+            (["q\n", "r\n", "s\n"], ["q\n", "r\n", "t\n", "s\n"]),
+            (["u\n", "v\n", "w\n"], ["u\n", "w\n", "v\n"]),
+            (["foo\n", "bar\n"], ["foo\n", "baz\n"]),
+            (["foo\n", "bar\n", "baz\n"], ["foo\n", "bar\n"]),
+            (["foo\n", "bar\n"], ["foo\n", "bar\n", "baz\n"]),
+            (["p\n", "q\n", "r\n", "s\n"], ["p\n", "q\n", "x\n", "r\n", "s\n"]),
+            (["alpha\n", "beta\n", "gamma\n"], ["alpha\n", "gamma\n", "delta\n"]),
+        ],
+    )
+    def test_roundtrip_small_cases(old: list[str], new: list[str]) -> None:
+        diff_text = unified_diff(old, new)
+        patched = apply_unified_diff(old, diff_text)
+        assert patched == new
+
+
+    def test_unified_diff_has_expected_headers() -> None:
+        old = ["a\n", "b\n"]
+        new = ["a\n", "x\n", "b\n"]
+        diff_text = unified_diff(old, new)
+        assert "---" in diff_text
+        assert "+++" in diff_text
+        assert "@@" in diff_text
+
+
+    def test_large_file_diff_roundtrip() -> None:
+        old = [f"line-{i}\n" for i in range(1200)]
+        new = old.copy()
+        for idx in [10, 200, 399, 700, 999]:
+            new[idx] = f"line-{idx}-changed\n"
+        new.insert(50, "inserted-50\n")
+        del new[800]
+
+        diff_text = unified_diff(old, new)
+        patched = apply_unified_diff(old, diff_text)
+        assert patched == new
+
+
+    def test_binary_like_content_roundtrip() -> None:
+        old = ["A\\x00B\\n", "C\\x00D\\n", "raw\\xff\\n"]
+        new = ["A\\x00B\\n", "C\\x00E\\n", "raw\\xff\\n", "tail\\x00\\n"]
+        diff_text = unified_diff(old, new)
+        patched = apply_unified_diff(old, diff_text)
+        assert patched == new
+
+
+    def test_all_insert_and_all_delete_cases() -> None:
+        old = []
+        new = ["n1\n", "n2\n", "n3\n"]
+        diff_insert = unified_diff(old, new)
+        assert apply_unified_diff(old, diff_insert) == new
+
+        old2 = ["d1\n", "d2\n"]
+        new2 = []
+        diff_delete = unified_diff(old2, new2)
+        assert apply_unified_diff(old2, diff_delete) == new2
+
+
+    def test_minimal_edit_distance_shape_for_single_change() -> None:
+        old = ["a\n", "b\n", "c\n"]
+        new = ["a\n", "x\n", "c\n"]
+        diff_text = unified_diff(old, new)
+        minus = [line for line in diff_text.splitlines() if line.startswith("-") and not line.startswith("---")]
+        plus = [line for line in diff_text.splitlines() if line.startswith("+") and not line.startswith("+++")]
+        assert len(minus) == 1
+        assert len(plus) == 1
+
+
+    def test_multiple_randomized_roundtrips() -> None:
+        base = [f"seed-{i}\n" for i in range(80)]
+        random.seed(7)
+        for _ in range(12):
+            old = base.copy()
+            new = base.copy()
+
+            for _ in range(5):
+                idx = random.randrange(len(new))
+                new[idx] = f"mut-{random.randrange(1000)}\\n"
+
+            for _ in range(3):
+                idx = random.randrange(len(new) + 1)
+                new.insert(idx, f"ins-{random.randrange(1000)}\\n")
+
+            for _ in range(3):
+                if new:
+                    idx = random.randrange(len(new))
+                    del new[idx]
+
+            diff_text = unified_diff(old, new)
+            patched = apply_unified_diff(old, diff_text)
+            assert patched == new
+lint_command: ruff check diff_algorithm.py
+timeout: 1200
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5
