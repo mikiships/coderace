@@ -30,6 +30,9 @@ def benchmark_main(
     parallel: int = typer.Option(
         1, "--parallel", "-p", help="Number of agents to run in parallel (default: 1)"
     ),
+    trials: int = typer.Option(
+        1, "--trials", help="Repeat each (task, agent) pair N times (default: 1)"
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="List what would run without executing"
     ),
@@ -69,23 +72,39 @@ def benchmark_main(
         console.print("[yellow]No tasks match the given filters.[/yellow]")
         raise typer.Exit(0)
 
+    if trials < 1:
+        console.print("[red]--trials must be >= 1[/red]")
+        raise typer.Exit(1)
+
     # Dry-run mode
     if dry_run:
-        console.print(f"[bold]Dry run:[/bold] {len(task_list)} tasks x {len(agent_list)} agents = {len(task_list) * len(agent_list)} runs\n")
+        run_count = len(task_list) * len(agent_list) * trials
+        console.print(
+            f"[bold]Dry run:[/bold] {len(task_list)} tasks x {len(agent_list)} agents "
+            f"x {trials} trial(s) = {run_count} runs\n"
+        )
         from rich.table import Table
         table = Table(title="Would run", show_lines=True)
         table.add_column("Task")
         table.add_column("Agent")
+        if trials > 1:
+            table.add_column("Trial", justify="right")
         for task_name in task_list:
             for agent in agent_list:
-                table.add_row(task_name, agent)
+                for trial_number in range(1, trials + 1):
+                    if trials > 1:
+                        table.add_row(task_name, agent, str(trial_number))
+                    else:
+                        table.add_row(task_name, agent)
         console.print(table)
         return
 
     console.print(f"[bold cyan]coderace benchmark[/bold cyan]")
     console.print(f"[dim]Agents: {', '.join(agent_list)}[/dim]")
     console.print(f"[dim]Tasks:  {', '.join(task_list)}[/dim]")
-    console.print(f"[dim]Timeout: {timeout}s per task | Parallel: {parallel}[/dim]")
+    console.print(
+        f"[dim]Timeout: {timeout}s per task | Parallel: {parallel} | Trials: {trials}[/dim]"
+    )
     console.print()
 
     from coderace.benchmark import run_benchmark
@@ -102,6 +121,7 @@ def benchmark_main(
         tasks=task_list,
         timeout=timeout,
         parallel=parallel,
+        trials=trials,
         progress_callback=progress_callback,
     )
 
@@ -254,6 +274,7 @@ def benchmark_show(
         results.append(TaskAgentResult(
             task_name=r["task_name"],
             agent=r["agent"],
+            trial_number=r.get("trial_number", 1),
             score=r["score"],
             wall_time=r["wall_time"],
             tests_pass=r["tests_pass"],

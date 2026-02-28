@@ -19,6 +19,7 @@ class TaskAgentResult:
     exit_clean: bool
     lint_clean: bool
     timed_out: bool
+    trial_number: int = 1
     verify_applicable: bool = False
     verify_passed: bool = False
     verify_score: float = 0.0
@@ -34,14 +35,24 @@ class BenchmarkResult:
     benchmark_id: str  # timestamp-based unique ID
     agents: list[str]
     tasks: list[str]
+    trials: int = 1
     results: list[TaskAgentResult] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
 
-    def get(self, task_name: str, agent: str) -> Optional[TaskAgentResult]:
+    def get(
+        self,
+        task_name: str,
+        agent: str,
+        trial_number: int | None = None,
+    ) -> Optional[TaskAgentResult]:
         """Look up a specific (task, agent) result."""
         for r in self.results:
-            if r.task_name == task_name and r.agent == agent:
+            if (
+                r.task_name == task_name
+                and r.agent == agent
+                and (trial_number is None or r.trial_number == trial_number)
+            ):
                 return r
         return None
 
@@ -67,6 +78,7 @@ def run_benchmark(
     tasks: list[str],
     timeout: int = 300,
     parallel: int = 1,
+    trials: int = 1,
     progress_callback=None,
 ) -> BenchmarkResult:
     """Run a benchmark: all tasks x all agents.
@@ -76,6 +88,7 @@ def run_benchmark(
         tasks: Built-in task names to run.
         timeout: Per-task timeout in seconds.
         parallel: Number of agents to run in parallel (default 1 = sequential).
+        trials: Number of repeat trials per (task, agent) pair.
         progress_callback: Optional callable(task, agent, status) for progress.
 
     Returns:
@@ -97,10 +110,13 @@ def run_benchmark(
     from coderace.task import load_task
 
     benchmark_id = _make_benchmark_id()
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
     result = BenchmarkResult(
         benchmark_id=benchmark_id,
         agents=list(agents),
         tasks=list(tasks),
+        trials=trials,
     )
 
     # Track temp dirs for built-in tasks so we can clean up
@@ -113,18 +129,20 @@ def run_benchmark(
         except Exception as exc:
             if progress_callback:
                 progress_callback(task_name, "*", f"ERROR: {exc}")
-            for agent in agents:
-                result.results.append(TaskAgentResult(
-                    task_name=task_name,
-                    agent=agent,
-                    score=0.0,
-                    wall_time=0.0,
-                    tests_pass=False,
-                    exit_clean=False,
-                    lint_clean=False,
-                    timed_out=False,
-                    error=str(exc),
-                ))
+            for trial_number in range(1, trials + 1):
+                for agent in agents:
+                    result.results.append(TaskAgentResult(
+                        task_name=task_name,
+                        agent=agent,
+                        trial_number=trial_number,
+                        score=0.0,
+                        wall_time=0.0,
+                        tests_pass=False,
+                        exit_clean=False,
+                        lint_clean=False,
+                        timed_out=False,
+                        error=str(exc),
+                    ))
             continue
 
         # Built-in tasks have repo=CWD which is wrong -- scaffold a temp git repo
@@ -144,58 +162,67 @@ def run_benchmark(
             repo = tmp
 
         if not repo.exists():
-            for agent in agents:
-                result.results.append(TaskAgentResult(
-                    task_name=task_name,
-                    agent=agent,
-                    score=0.0,
-                    wall_time=0.0,
-                    tests_pass=False,
-                    exit_clean=False,
-                    lint_clean=False,
-                    timed_out=False,
-                    error=f"Repo not found: {repo}",
-                ))
+            for trial_number in range(1, trials + 1):
+                for agent in agents:
+                    result.results.append(TaskAgentResult(
+                        task_name=task_name,
+                        agent=agent,
+                        trial_number=trial_number,
+                        score=0.0,
+                        wall_time=0.0,
+                        tests_pass=False,
+                        exit_clean=False,
+                        lint_clean=False,
+                        timed_out=False,
+                        error=f"Repo not found: {repo}",
+                    ))
             continue
 
         try:
             base_ref = get_current_ref(repo)
         except Exception as exc:
-            for agent in agents:
-                result.results.append(TaskAgentResult(
-                    task_name=task_name,
-                    agent=agent,
-                    score=0.0,
-                    wall_time=0.0,
-                    tests_pass=False,
-                    exit_clean=False,
-                    lint_clean=False,
-                    timed_out=False,
-                    error=str(exc),
-                ))
+            for trial_number in range(1, trials + 1):
+                for agent in agents:
+                    result.results.append(TaskAgentResult(
+                        task_name=task_name,
+                        agent=agent,
+                        trial_number=trial_number,
+                        score=0.0,
+                        wall_time=0.0,
+                        tests_pass=False,
+                        exit_clean=False,
+                        lint_clean=False,
+                        timed_out=False,
+                        error=str(exc),
+                    ))
             continue
 
-        if parallel > 1 and len(agents) > 1:
-            _run_task_parallel(
-                task=task,
-                task_name=task_name,
-                agents=agents,
-                base_ref=base_ref,
-                timeout=timeout,
-                result=result,
-                progress_callback=progress_callback,
-                max_workers=parallel,
-            )
-        else:
-            _run_task_sequential(
-                task=task,
-                task_name=task_name,
-                agents=agents,
-                base_ref=base_ref,
-                timeout=timeout,
-                result=result,
-                progress_callback=progress_callback,
-            )
+        for trial_number in range(1, trials + 1):
+            if parallel > 1 and len(agents) > 1:
+                _run_task_parallel(
+                    task=task,
+                    task_name=task_name,
+                    agents=agents,
+                    base_ref=base_ref,
+                    timeout=timeout,
+                    result=result,
+                    progress_callback=progress_callback,
+                    max_workers=parallel,
+                    trial_number=trial_number,
+                    total_trials=trials,
+                )
+            else:
+                _run_task_sequential(
+                    task=task,
+                    task_name=task_name,
+                    agents=agents,
+                    base_ref=base_ref,
+                    timeout=timeout,
+                    result=result,
+                    progress_callback=progress_callback,
+                    trial_number=trial_number,
+                    total_trials=trials,
+                )
 
     result.finish()
 
@@ -207,6 +234,13 @@ def run_benchmark(
     return result
 
 
+def _format_trial_status(status: str, trial_number: int, total_trials: int) -> str:
+    """Prefix a progress status with trial metadata when running repeated trials."""
+    if total_trials <= 1:
+        return status
+    return f"Trial {trial_number}/{total_trials} | {status}"
+
+
 def _run_single_agent(
     task,
     task_name: str,
@@ -214,6 +248,8 @@ def _run_single_agent(
     base_ref: str,
     timeout: int,
     progress_callback,
+    trial_number: int,
+    total_trials: int,
 ) -> TaskAgentResult:
     """Run a single (task, agent) pair and return the result."""
     from coderace.adapters import ADAPTERS
@@ -223,14 +259,23 @@ def _run_single_agent(
     repo = task.repo
 
     if progress_callback:
-        progress_callback(task_name, agent, "running")
+        progress_callback(
+            task_name,
+            agent,
+            _format_trial_status("running", trial_number, total_trials),
+        )
 
     if agent not in ADAPTERS:
         if progress_callback:
-            progress_callback(task_name, agent, "unknown agent")
+            progress_callback(
+                task_name,
+                agent,
+                _format_trial_status("unknown agent", trial_number, total_trials),
+            )
         return TaskAgentResult(
             task_name=task_name,
             agent=agent,
+            trial_number=trial_number,
             score=0.0,
             wall_time=0.0,
             tests_pass=False,
@@ -248,10 +293,15 @@ def _run_single_agent(
         create_branch(repo, branch, base_ref)
     except Exception as exc:
         if progress_callback:
-            progress_callback(task_name, agent, f"branch error")
+            progress_callback(
+                task_name,
+                agent,
+                _format_trial_status("branch error", trial_number, total_trials),
+            )
         return TaskAgentResult(
             task_name=task_name,
             agent=agent,
+            trial_number=trial_number,
             score=0.0,
             wall_time=0.0,
             tests_pass=False,
@@ -287,11 +337,16 @@ def _run_single_agent(
 
         status = "timed out" if agent_result.timed_out else f"done ({agent_result.wall_time:.1f}s)"
         if progress_callback:
-            progress_callback(task_name, agent, status)
+            progress_callback(
+                task_name,
+                agent,
+                _format_trial_status(status, trial_number, total_trials),
+            )
 
         return TaskAgentResult(
             task_name=task_name,
             agent=agent,
+            trial_number=trial_number,
             score=score.composite,
             wall_time=agent_result.wall_time,
             tests_pass=score.breakdown.tests_pass,
@@ -310,10 +365,15 @@ def _run_single_agent(
         except Exception:
             pass
         if progress_callback:
-            progress_callback(task_name, agent, f"error")
+            progress_callback(
+                task_name,
+                agent,
+                _format_trial_status("error", trial_number, total_trials),
+            )
         return TaskAgentResult(
             task_name=task_name,
             agent=agent,
+            trial_number=trial_number,
             score=0.0,
             wall_time=0.0,
             tests_pass=False,
@@ -332,10 +392,21 @@ def _run_task_sequential(
     timeout: int,
     result: BenchmarkResult,
     progress_callback,
+    trial_number: int,
+    total_trials: int,
 ) -> None:
     """Run all agents for one task sequentially."""
     for agent in agents:
-        tar = _run_single_agent(task, task_name, agent, base_ref, timeout, progress_callback)
+        tar = _run_single_agent(
+            task,
+            task_name,
+            agent,
+            base_ref,
+            timeout,
+            progress_callback,
+            trial_number,
+            total_trials,
+        )
         result.results.append(tar)
 
 
@@ -348,6 +419,8 @@ def _run_task_parallel(
     result: BenchmarkResult,
     progress_callback,
     max_workers: int,
+    trial_number: int,
+    total_trials: int,
 ) -> None:
     """Run agents for one task in parallel using worktrees."""
     import tempfile
@@ -371,7 +444,8 @@ def _run_task_parallel(
     def run_in_worktree(agent: str) -> TaskAgentResult:
         if agent not in ADAPTERS:
             return TaskAgentResult(
-                task_name=task_name, agent=agent, score=0.0, wall_time=0.0,
+                task_name=task_name, agent=agent, trial_number=trial_number,
+                score=0.0, wall_time=0.0,
                 tests_pass=False, exit_clean=False, lint_clean=False,
                 timed_out=False, error=f"Unknown agent: {agent}",
             )
@@ -387,7 +461,11 @@ def _run_task_parallel(
             add_worktree(repo, worktree_dir, branch)
 
             if progress_callback:
-                progress_callback(task_name, agent, "running")
+                progress_callback(
+                    task_name,
+                    agent,
+                    _format_trial_status("running", trial_number, total_trials),
+                )
 
             adapter = ADAPTERS[agent]()
             agent_result = adapter.run(task.description, worktree_dir, timeout)
@@ -412,10 +490,14 @@ def _run_task_parallel(
 
             status = "timed out" if agent_result.timed_out else f"done ({agent_result.wall_time:.1f}s)"
             if progress_callback:
-                progress_callback(task_name, agent, status)
+                progress_callback(
+                    task_name,
+                    agent,
+                    _format_trial_status(status, trial_number, total_trials),
+                )
 
             return TaskAgentResult(
-                task_name=task_name, agent=agent,
+                task_name=task_name, agent=agent, trial_number=trial_number,
                 score=score.composite, wall_time=agent_result.wall_time,
                 tests_pass=score.breakdown.tests_pass,
                 exit_clean=score.breakdown.exit_clean,
@@ -429,9 +511,14 @@ def _run_task_parallel(
             )
         except Exception as exc:
             if progress_callback:
-                progress_callback(task_name, agent, "error")
+                progress_callback(
+                    task_name,
+                    agent,
+                    _format_trial_status("error", trial_number, total_trials),
+                )
             return TaskAgentResult(
-                task_name=task_name, agent=agent, score=0.0, wall_time=0.0,
+                task_name=task_name, agent=agent, trial_number=trial_number,
+                score=0.0, wall_time=0.0,
                 tests_pass=False, exit_clean=False, lint_clean=False,
                 timed_out=False, error=str(exc),
             )

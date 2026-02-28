@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS benchmark_results (
     benchmark_id TEXT NOT NULL REFERENCES benchmarks(benchmark_id),
     task_name TEXT NOT NULL,
     agent TEXT NOT NULL,
+    trial_number INTEGER NOT NULL DEFAULT 1,
     score REAL NOT NULL,
     wall_time REAL NOT NULL,
     tests_pass INTEGER NOT NULL,
@@ -180,6 +181,12 @@ class ResultStore:
             "benchmark_results",
             "verify_output",
             "TEXT NOT NULL DEFAULT ''",
+        )
+        self._ensure_column(
+            conn,
+            "benchmark_results",
+            "trial_number",
+            "INTEGER NOT NULL DEFAULT 1",
         )
 
     def _ensure_column(
@@ -432,14 +439,15 @@ class ResultStore:
         for r in benchmark_result.results:
             conn.execute(
                 "INSERT INTO benchmark_results "
-                "(benchmark_id, task_name, agent, score, wall_time, tests_pass, "
+                "(benchmark_id, task_name, agent, trial_number, score, wall_time, tests_pass, "
                 "exit_clean, lint_clean, timed_out, verify_applicable, verify_passed, "
                 "verify_score, verify_output, cost_usd, error) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     benchmark_result.benchmark_id,
                     r.task_name,
                     r.agent,
+                    r.trial_number,
                     r.score,
                     r.wall_time,
                     1 if r.tests_pass else 0,
@@ -488,7 +496,8 @@ class ResultStore:
             return None
 
         detail_rows = conn.execute(
-            "SELECT * FROM benchmark_results WHERE benchmark_id = ?",
+            "SELECT * FROM benchmark_results WHERE benchmark_id = ? "
+            "ORDER BY task_name ASC, trial_number ASC, agent ASC",
             (benchmark_id,),
         ).fetchall()
 
@@ -499,6 +508,7 @@ class ResultStore:
             {
                 "task_name": r["task_name"],
                 "agent": r["agent"],
+                "trial_number": r["trial_number"],
                 "score": r["score"],
                 "wall_time": r["wall_time"],
                 "tests_pass": bool(r["tests_pass"]),

@@ -442,3 +442,41 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 
 **Blockers:**
 - Per-deliverable commits could not be created because this sandbox denies writes under `.git/` (`.git/index.lock: Operation not permitted`).
+
+---
+
+## Date: 2026-02-28 (v1.0 Statistical Benchmarking & ELO Contract)
+
+### D1: Trials Mode (`--trials N`) ✅
+
+**Built:**
+- `coderace/benchmark.py`
+  - Added `trials` support to `run_benchmark(...)` (default `1`, validated `>=1`).
+  - Added `trial_number` to `TaskAgentResult` and `trials` to `BenchmarkResult`.
+  - Updated sequential/parallel execution paths to run each `(task, agent)` pair for every trial.
+  - Added trial-aware progress status formatting (`Trial X/N | ...`).
+- `coderace/commands/benchmark.py`
+  - Added `--trials` CLI flag.
+  - Updated dry-run counts and table expansion for multi-trial runs.
+  - Passed `trials` through to benchmark core execution.
+- `coderace/store.py`
+  - Added `trial_number` column to `benchmark_results` schema with migration-safe backfill.
+  - Persisted and loaded `trial_number` in benchmark save/show flows.
+
+**Tests:**
+- Added `tests/test_benchmark_trials.py` with D1 coverage:
+  - single-trial backward compatibility
+  - multi-trial execution fanout
+  - trial progress status formatting
+  - CLI `--trials` forwarding
+  - dry-run trial-inclusive run counts
+  - store roundtrip for `trial_number`
+- Full suite validation:
+  - `python3 -m pytest`
+  - Result: **417 passed**
+
+**Next:**
+- D2: implement `coderace/statistics.py` (trial + aggregate stats with CI and edge-case handling).
+
+**Blockers:**
+- None.
