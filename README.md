@@ -695,3 +695,7 @@ ELO rules:
   "summary": {}
 }
 ```
+
+## See Also
+
+- **[agentmd](https://github.com/mikiships/agentmd)** — Generate and score context files (CLAUDE.md, AGENTS.md, .cursorrules) for AI coding agents. Pair with coderace: generate context with agentmd, measure agent performance with coderace, iterate with data instead of vibes.
