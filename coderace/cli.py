@@ -27,6 +27,7 @@ from coderace.types import AgentResult, Score
 
 from coderace.commands.tasks import app as tasks_app
 from coderace.commands.benchmark import app as benchmark_app
+from coderace.commands.context_eval import app as context_eval_app
 
 app = typer.Typer(
     name="coderace",
@@ -35,6 +36,7 @@ app = typer.Typer(
 )
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(benchmark_app, name="benchmark")
+app.add_typer(context_eval_app, name="context-eval")
 console = Console()
 
 

@@ -649,3 +649,45 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 - Full test suite after each deliverable: passed
 - Final full suite status: **447 passed**
 - Version now: **1.0.0**
+
+---
+
+## Date: 2026-03-02 (Context Eval Contract)
+
+### D1: context-eval CLI Command + D2: Statistical Comparison Report ✅
+
+**Built:**
+- `coderace/context_eval.py`: Core A/B evaluation logic
+  - `ContextEvalResult` and `TrialResult` data classes
+  - Context file backup/restore/placement/removal functions
+  - `KNOWN_CONTEXT_FILES` list for baseline stripping
+  - `run_context_eval()` orchestrator that runs baseline and treatment trials
+- `coderace/commands/context_eval.py`: CLI subcommand
+  - `--context-file PATH` (required)
+  - `--task PATH` or `--benchmark` (mutually exclusive)
+  - `--agents AGENT1,AGENT2` (required)
+  - `--trials N` (default: 3, min: 2)
+  - `--output PATH` (optional JSON)
+  - `--task-dir PATH` (optional custom task directory)
+  - Full validation: missing files, invalid agents, trials < 2, etc.
+- `coderace/context_eval_report.py`: Statistical comparison + report rendering
+  - Pass rate, mean score, delta with 95% CI (Welch's t-test)
+  - Cohen's d effect size
+  - Per-agent summary table
+  - Per-task breakdown table
+  - Summary verdict logic
+  - JSON output format
+  - Rich terminal table output
+- `coderace/cli.py`: Registered `context-eval` subcommand
+
+**Tests (41 new, all pass):**
+- Unit tests for context file placement/removal/backup logic
+- Unit tests for ContextEvalResult dataclass and filtering
+- CLI argument validation tests (8 edge cases)
+- Statistical comparison tests (pass rate, Cohen's d, delta CI, verdict)
+- Terminal and JSON report rendering tests
+- Integration test with mock agent showing improvement detection
+
+**Full test suite: 488 passed (447 original + 41 new)**
+
+**Next:** D3 (Dashboard Integration)
