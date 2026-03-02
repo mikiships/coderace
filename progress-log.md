@@ -691,3 +691,27 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 **Full test suite: 488 passed (447 original + 41 new)**
 
 **Next:** D3 (Dashboard Integration)
+
+### D3: Dashboard Integration ✅
+
+**Built:**
+- Updated `coderace/dashboard.py`:
+  - Added `context_eval_data` parameter to `generate_dashboard()`
+  - Added `_build_context_eval_section()` rendering A/B comparison section:
+    - Bar chart showing baseline vs treatment scores per agent
+    - Delta table with CI (95%) and effect size
+    - Verdict display
+  - Added CSS for A/B charts (`.ab-baseline`, `.ab-treatment`, `.positive`, `.negative`)
+  - Updated `_assemble_page()` to include context-eval section
+- Updated `coderace/cli.py`:
+  - Added `--context-eval PATH` option to `dashboard` command
+  - Loads JSON context-eval results and passes to dashboard generator
+
+**Tests (17 new, all pass):**
+- `_build_context_eval_section` unit tests (12): empty/none/wrong type, heading, agents, bar chart, delta table, verdict, positive/negative delta classes, HTML escaping
+- Dashboard integration tests (3): with context-eval data, without, empty store + context-eval
+- CLI tests (2): `--context-eval` flag, file not found
+
+**Full test suite: 505 passed (447 original + 58 new)**
+
+**Next:** D4 (Documentation + Examples)

@@ -15,6 +15,7 @@ def generate_dashboard(
     task_name: str | None = None,
     limit: int | None = None,
     title: str = "coderace Leaderboard",
+    context_eval_data: dict | None = None,
 ) -> str:
     """Generate a self-contained HTML dashboard from the result store.
 
@@ -23,6 +24,7 @@ def generate_dashboard(
         task_name: Filter to a specific task.
         limit: Only include the last N races.
         title: Custom title for the dashboard.
+        context_eval_data: Optional context-eval JSON data to include in dashboard.
 
     Returns:
         Complete HTML string for the dashboard.
@@ -30,7 +32,7 @@ def generate_dashboard(
     stats = store.get_agent_stats(task_name=task_name)
     runs = store.get_runs(task_name=task_name, limit=limit or 50)
 
-    if not stats and not runs:
+    if not stats and not runs and not context_eval_data:
         return _generate_empty_dashboard(title)
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -40,6 +42,7 @@ def generate_dashboard(
     history_html = _build_race_history(runs)
     agent_cards_html = _build_agent_cards(stats, runs)
     cost_chart_html = _build_cost_chart(stats)
+    context_eval_html = _build_context_eval_section(context_eval_data) if context_eval_data else ""
 
     return _assemble_page(
         title=safe_title,
@@ -48,6 +51,7 @@ def generate_dashboard(
         history=history_html,
         agent_cards=agent_cards_html,
         cost_chart=cost_chart_html,
+        context_eval=context_eval_html,
     )
 
 
@@ -322,12 +326,26 @@ tbody tr:hover { background: var(--bg-hover); }
   display: inline-block; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 0.5rem 1rem; margin: 0.75rem 0; font-size: 0.875rem;
 }
+.ab-chart { display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem; }
+.ab-row { display: flex; align-items: flex-start; gap: 0.75rem; }
+.ab-agent { width: 100px; text-align: right; font-size: 0.875rem; font-weight: 500; flex-shrink: 0; padding-top: 0.25rem; }
+.ab-bars { flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
+.ab-bar-group { display: flex; align-items: center; gap: 0.5rem; }
+.ab-label { width: 70px; text-align: right; font-size: 0.75rem; color: var(--text-muted); flex-shrink: 0; }
+.ab-value { width: 50px; font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ab-baseline { background: #6366f1; }
+.ab-treatment { background: #22c55e; }
+.positive { color: #22c55e; }
+.negative { color: #f85149; }
+.verdict { margin-top: 1rem; padding: 0.75rem 1rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-weight: 500; }
 @media (max-width: 640px) {
   .container { padding: 1rem; }
   .hero h1 { font-size: 1.375rem; }
   .card-grid { grid-template-columns: 1fr; }
   .bar-label { width: 70px; font-size: 0.75rem; }
   .bar-value { width: 80px; }
+  .ab-agent { width: 70px; font-size: 0.75rem; }
+  .ab-label { width: 60px; }
 }
 </style>"""
 
@@ -342,6 +360,82 @@ r.style.display=r.style.display==="table-row"?"none":"table-row";});}
 </script>"""
 
 
+def _build_context_eval_section(data: dict) -> str:
+    """Build the context-eval A/B comparison section for the dashboard."""
+    if not data or data.get("type") != "context-eval":
+        return ""
+
+    agents = data.get("agents", [])
+    summary = data.get("summary", {})
+    context_file = html.escape(str(data.get("context_file", "unknown")))
+
+    if not agents:
+        return ""
+
+    # Bar chart: baseline vs treatment pass rates per agent
+    bar_rows = ""
+    for agent_data in agents:
+        agent = html.escape(agent_data["agent"])
+        baseline = agent_data.get("baseline_mean_score", 0)
+        treatment = agent_data.get("treatment_mean_score", 0)
+        max_val = max(baseline, treatment, 1)
+        b_pct = baseline / max_val * 100
+        t_pct = treatment / max_val * 100
+
+        bar_rows += f"""<div class="ab-row">
+  <span class="ab-agent">{agent}</span>
+  <div class="ab-bars">
+    <div class="ab-bar-group">
+      <span class="ab-label">Baseline</span>
+      <div class="bar-track"><div class="bar-fill ab-baseline" style="width:{b_pct:.1f}%"></div></div>
+      <span class="ab-value">{baseline:.1f}</span>
+    </div>
+    <div class="ab-bar-group">
+      <span class="ab-label">Treatment</span>
+      <div class="bar-track"><div class="bar-fill ab-treatment" style="width:{t_pct:.1f}%"></div></div>
+      <span class="ab-value">{treatment:.1f}</span>
+    </div>
+  </div>
+</div>
+"""
+
+    # Delta chart with confidence intervals
+    delta_rows = ""
+    for agent_data in agents:
+        agent = html.escape(agent_data["agent"])
+        delta = agent_data.get("delta", 0)
+        ci = agent_data.get("ci_95", [0, 0])
+        effect = agent_data.get("effect_size", 0)
+        delta_cls = "positive" if delta > 0 else "negative" if delta < 0 else ""
+
+        delta_rows += (
+            f'<tr>'
+            f'<td class="agent">{agent}</td>'
+            f'<td class="num {delta_cls}">{delta:+.1f}</td>'
+            f'<td class="num">[{ci[0]:.1f}, {ci[1]:.1f}]</td>'
+            f'<td class="num">{effect:.2f}</td>'
+            f'</tr>\n'
+        )
+
+    verdict = html.escape(summary.get("verdict", ""))
+
+    return f"""<section class="section">
+  <h2>Context Eval: A/B Comparison</h2>
+  <p class="chart-note">Context file: <strong>{context_file}</strong></p>
+  <div class="ab-chart">{bar_rows}</div>
+  <h3>Statistical Summary</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Agent</th><th>Delta</th><th>CI (95%)</th><th>Effect Size</th>
+    </tr></thead>
+    <tbody>{delta_rows}</tbody>
+  </table>
+  </div>
+  <p class="verdict">{verdict}</p>
+</section>"""
+
+
 def _assemble_page(
     *,
     title: str,
@@ -350,6 +444,7 @@ def _assemble_page(
     history: str,
     agent_cards: str,
     cost_chart: str,
+    context_eval: str = "",
 ) -> str:
     """Assemble the full HTML page from sections."""
     return f"""<!DOCTYPE html>
@@ -368,6 +463,7 @@ def _assemble_page(
     <p class="subtitle">Last updated: {timestamp}</p>
   </header>
 {leaderboard}
+{context_eval}
 {history}
 {agent_cards}
 {cost_chart}

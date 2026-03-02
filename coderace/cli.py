@@ -868,12 +868,23 @@ def dashboard(
     here_now_key: str | None = typer.Option(
         None, "--here-now-key", help="here.now API key for persistent publish"
     ),
+    context_eval_json: Path | None = typer.Option(
+        None, "--context-eval", help="Include context-eval JSON results in dashboard"
+    ),
 ) -> None:
     """Generate an HTML dashboard from race results."""
+    import json
     import webbrowser
 
     from coderace.dashboard import generate_dashboard
     from coderace.store import ResultStore
+
+    context_eval_data = None
+    if context_eval_json is not None:
+        if not context_eval_json.exists():
+            console.print(f"[red]Context-eval file not found: {context_eval_json}[/red]")
+            raise typer.Exit(1)
+        context_eval_data = json.loads(context_eval_json.read_text())
 
     try:
         store = ResultStore()
@@ -887,6 +898,7 @@ def dashboard(
             task_name=task,
             limit=last,
             title=title,
+            context_eval_data=context_eval_data,
         )
     finally:
         store.close()
