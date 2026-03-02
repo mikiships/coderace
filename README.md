@@ -696,6 +696,100 @@ ELO rules:
 }
 ```
 
+## Context Evaluation
+
+The `coderace context-eval` command measures whether a context file (CLAUDE.md, AGENTS.md, .cursorrules, etc.) actually improves agent performance. It runs A/B trials — baseline (no context file) vs treatment (with context file) — and produces statistical comparisons.
+
+```bash
+# Evaluate whether CLAUDE.md improves claude's performance on a task
+coderace context-eval --context-file CLAUDE.md --task fix-auth-bug.yaml --agents claude --trials 5
+
+# Evaluate across all built-in benchmark tasks
+coderace context-eval --context-file CLAUDE.md --benchmark --agents claude,codex
+
+# Save results as JSON
+coderace context-eval --context-file CLAUDE.md --task task.yaml --agents claude --output results.json
+
+# Use a custom task directory
+coderace context-eval --context-file CLAUDE.md --benchmark --task-dir ./my-tasks --agents claude
+```
+
+### How It Works
+
+For each agent × task combination:
+1. Run N trials **without** the context file (baseline condition)
+2. Run N trials **with** the context file placed in the task directory (treatment condition)
+3. Compare pass rates, mean scores, and compute statistical significance
+
+### Output
+
+The terminal report shows:
+- **Per-agent summary**: baseline vs treatment pass rates and scores, delta with 95% CI, Cohen's d effect size
+- **Per-task breakdown**: which tasks improved, which degraded
+- **Verdict**: whether the context file significantly improved performance
+
+```
+┌────────┬───────────────────┬────────────────────┬────────────────┬─────────────────┬────────┬──────────────────┬─────────────┐
+│ Agent  │ Baseline Pass Rate│ Treatment Pass Rate │ Baseline Score │ Treatment Score │ Delta  │ CI (95%)         │ Effect Size │
+├────────┼───────────────────┼────────────────────┼────────────────┼─────────────────┼────────┼──────────────────┼─────────────┤
+│ claude │              67%  │              100%  │           55.0 │            81.0 │ +26.0  │ [10.5, 41.5]     │        2.10 │
+│ codex  │              33%  │               67%  │           45.0 │            70.0 │ +25.0  │ [8.0, 42.0]      │        1.80 │
+└────────┴───────────────────┴────────────────────┴────────────────┴─────────────────┴────────┴──────────────────┴─────────────┘
+
+Context file improved performance by +25.5 points (CI: [12.0, 39.0])
+```
+
+### Context-Eval CLI Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--context-file` | Path to the context file to evaluate (required) | — |
+| `--task` | Path to a single task YAML | — |
+| `--benchmark` | Run against built-in benchmark tasks | `false` |
+| `--agents` | Comma-separated agent names (required) | — |
+| `--trials` | Trials per condition (min: 2) | `3` |
+| `--output` | Save JSON results to file | — |
+| `--task-dir` | Custom task directory for benchmark mode | — |
+
+### Dashboard Integration
+
+Include context-eval results in the HTML dashboard:
+
+```bash
+# Run context-eval and save JSON
+coderace context-eval --context-file CLAUDE.md --task task.yaml --agents claude --output eval.json
+
+# Generate dashboard with A/B comparison section
+coderace dashboard --context-eval eval.json
+```
+
+## Measuring Context Engineering Impact
+
+Context engineering — crafting CLAUDE.md, AGENTS.md, .cursorrules, and similar files — is becoming a core developer skill. But until now, there was no way to empirically measure whether your context files actually help.
+
+**The problem:** You write a CLAUDE.md with coding conventions, architectural guidelines, and project-specific instructions. But does it actually make agents produce better code? Or is it cargo-cult configuration?
+
+**The solution:** `coderace context-eval` gives you data:
+
+1. **Write your context file** (e.g., CLAUDE.md with project conventions)
+2. **Run A/B evaluation** against real coding tasks
+3. **Get statistical evidence** of improvement (or lack thereof)
+
+```bash
+# Iterate on your context file with data
+coderace context-eval --context-file CLAUDE.md --benchmark --agents claude --trials 5
+
+# Compare different context files
+coderace context-eval --context-file v1-claude.md --task task.yaml --agents claude --output v1.json
+coderace context-eval --context-file v2-claude.md --task task.yaml --agents claude --output v2.json
+```
+
+**Interpreting results:**
+- **Effect size > 0.8**: Large improvement — your context file is helping significantly
+- **Effect size 0.2–0.8**: Moderate improvement — some benefit, room to iterate
+- **Effect size < 0.2**: Negligible — your context file isn't making a measurable difference
+- **CI crosses zero**: Not statistically significant — need more trials or a better context file
+
 ## See Also
 
 - **[agentmd](https://github.com/mikiships/agentmd)** — Generate and score context files (CLAUDE.md, AGENTS.md, .cursorrules) for AI coding agents. Pair with coderace: generate context with agentmd, measure agent performance with coderace, iterate with data instead of vibes.

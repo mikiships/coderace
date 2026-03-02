@@ -715,3 +715,23 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 **Full test suite: 505 passed (447 original + 58 new)**
 
 **Next:** D4 (Documentation + Examples)
+
+### D4: Documentation + Examples ✅
+
+**Built:**
+- `README.md`:
+  - Added "Context Evaluation" section with usage examples, output format, CLI flags table
+  - Added "Dashboard Integration" subsection for `--context-eval` flag
+  - Added "Measuring Context Engineering Impact" section with interpretation guide
+- `examples/context-eval-demo.sh`: Executable demo script showing full workflow
+- CLI help text: `coderace context-eval --help` and `coderace --help` both show clear descriptions
+
+**Full test suite: 505 passed (447 original + 58 new)**
+
+### Context Eval Contract Summary (D1-D4)
+
+- Deliverables completed in order: **D1, D2, D3, D4**
+- D1 and D2 were implemented together (shared statistical infrastructure)
+- Full test suite after each deliverable: passed
+- Final full suite status: **505 passed** (447 original + 58 new)
+- Committed after each deliverable
