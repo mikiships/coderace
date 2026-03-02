@@ -1,0 +1,70 @@
+Context Eval Build Contract: COMPLETE
+======================================
+
+Date: 2026-03-02
+All deliverables (D1-D4) implemented and validated.
+
+## What Was Built
+
+### D1: context-eval CLI Command (core + CLI)
+- `coderace/context_eval.py`: Core A/B evaluation engine
+  - ContextEvalResult and TrialResult data classes
+  - Context file backup/restore/placement/removal for baseline vs treatment
+  - KNOWN_CONTEXT_FILES list (CLAUDE.md, AGENTS.md, .cursorrules, etc.)
+  - run_context_eval() orchestrator running N trials per condition
+- `coderace/commands/context_eval.py`: CLI subcommand with:
+  --context-file PATH, --task PATH, --benchmark, --agents, --trials N,
+  --output PATH, --task-dir PATH
+- Full input validation (missing files, invalid agents, trials < 2, etc.)
+
+### D2: Statistical Comparison Report
+- `coderace/context_eval_report.py`: Statistical analysis and rendering
+  - Delta with 95% CI using Welch's t-test
+  - Cohen's d effect size
+  - Per-agent summary: baseline vs treatment pass rates and scores
+  - Per-task breakdown: which tasks improved, which degraded
+  - Summary verdict: "improved", "degraded", or "no significant improvement"
+  - Rich terminal table output
+  - JSON output format
+
+### D3: Dashboard Integration
+- Extended `coderace/dashboard.py` with context-eval A/B section:
+  - Bar chart: baseline vs treatment scores per agent
+  - Delta table with CI (95%) and effect size
+  - Verdict display
+  - CSS for A/B visualization (.ab-baseline, .ab-treatment, .positive, .negative)
+- Added --context-eval PATH flag to `coderace dashboard` command
+
+### D4: Documentation + Examples
+- README.md: Added "Context Evaluation" and "Measuring Context Engineering Impact" sections
+  with usage examples, output format, CLI flags table, and effect size interpretation guide
+- examples/context-eval-demo.sh: Executable demo script
+- Clear help text on `coderace context-eval --help` and `coderace --help`
+
+## Test Results
+
+- 58 new tests added (41 for D1+D2, 17 for D3)
+- All 505 tests pass (447 original + 58 new)
+- No regressions in existing test suite
+
+## Commits
+
+1. feat(context-eval): add context-eval command with A/B statistical comparison (D1+D2)
+2. feat(context-eval): add dashboard A/B comparison section (D3)
+3. docs(context-eval): add README section, examples, and interpretation guide (D4)
+
+## Files Created/Modified
+
+New files:
+- coderace/context_eval.py
+- coderace/commands/context_eval.py
+- coderace/context_eval_report.py
+- tests/test_context_eval.py
+- tests/test_context_eval_dashboard.py
+- examples/context-eval-demo.sh
+
+Modified files:
+- coderace/cli.py (registered context-eval subcommand + --context-eval dashboard flag)
+- coderace/dashboard.py (added A/B comparison section)
+- README.md (added context-eval documentation)
+- progress-log.md (added D1-D4 progress entries)
