@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0] - 2026-03-03
+
+### Added
+
+- **`coderace race` command** - New first-to-pass race mode with early-stop semantics. Agents run in parallel worktrees and the race ends when the first winner is found.
+- **Live race UI** - Rich `Live` panel with per-agent status and timers:
+  - `🔨 coding...`
+  - `🧪 testing...`
+  - `✅ WINNER!`
+  - `❌ failed`
+  - `⏰ timed out`
+  - `🛑 stopped`
+- **Winner announcement and runner-up delta** - Prints race winner and optional runner-up timing delta after the live panel closes.
+- **Race result persistence (JSON fallback)** - Saves race summaries to `.coderace/race-results.json` including `race_id`, winner metadata, participant statuses, exit codes, and wall times. Supports `--no-save`.
+- **Race test suite** - Added 21 race-focused tests (`tests/test_race.py`) covering winner logic, cancellation, timeout/no-winner paths, verification modes, live updates, serialization, and Ctrl+C cleanup.
+
 ## [1.0.0] - 2026-02-28
 
 ### Added

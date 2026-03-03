@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 import typer
 from rich.console import Console
@@ -21,13 +22,14 @@ from coderace.git_ops import (
     remove_worktree,
 )
 from coderace.reporter import print_results, save_results_json
-from coderace.scorer import compute_score
+from coderace.scorer import _write_verify_files, compute_score, run_command
 from coderace.task import create_template, load_task
 from coderace.types import AgentResult, Score
 
 from coderace.commands.tasks import app as tasks_app
 from coderace.commands.benchmark import app as benchmark_app
 from coderace.commands.context_eval import app as context_eval_app
+from coderace.commands.race import app as race_app
 
 app = typer.Typer(
     name="coderace",
@@ -37,6 +39,7 @@ app = typer.Typer(
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(context_eval_app, name="context-eval")
+app.add_typer(race_app, name="race")
 console = Console()
 
 
@@ -83,11 +86,132 @@ def _run_agent_worktree(
     timeout: int,
     no_cost: bool = False,
     custom_pricing: dict | None = None,
-) -> tuple[AgentResult | None, int]:
+    stop_event: object | None = None,
+    status_callback: Callable[[str], None] | None = None,
+    verify_commands: list[str] | None = None,
+    verify_files: dict[str, str] | None = None,
+    return_metadata: bool = False,
+) -> (
+    tuple[AgentResult | None, int]
+    | tuple[AgentResult | None, int, dict[str, object]]
+):
     """Run a single agent in a git worktree (for parallel execution)."""
+    import subprocess
     import tempfile
+    import time
 
     worktree_dir = Path(tempfile.mkdtemp(prefix=f"coderace-{agent_name}-"))
+    total_start = time.monotonic()
+    metadata: dict[str, object] = {
+        "verify_passed": None,
+        "verify_exit_codes": [],
+        "verify_outputs": [],
+        "stopped": False,
+        "total_wall_time": 0.0,
+    }
+
+    def _return(
+        result: AgentResult | None,
+        lines: int,
+    ) -> (
+        tuple[AgentResult | None, int]
+        | tuple[AgentResult | None, int, dict[str, object]]
+    ):
+        metadata["total_wall_time"] = time.monotonic() - total_start
+        if return_metadata:
+            return result, lines, metadata
+        return result, lines
+
+    def _run_adapter_with_stop_event() -> tuple[AgentResult, bool]:
+        cmd = adapter.build_command(task_description)
+        start = time.monotonic()
+        timed_out = False
+        stopped = False
+        stdout = ""
+        stderr = ""
+
+        def _stop_proc(proc: subprocess.Popen[str]) -> None:
+            if proc.poll() is not None:
+                return
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=worktree_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except FileNotFoundError:
+            wall = time.monotonic() - start
+            result = AgentResult(
+                agent=agent_name,
+                exit_code=127,
+                stdout="",
+                stderr=f"Command not found: {cmd[0]}",
+                wall_time=wall,
+                timed_out=False,
+            )
+            return result, False
+
+        deadline = start + timeout
+        while proc.poll() is None:
+            if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
+                stopped = True
+                _stop_proc(proc)
+                break
+            if time.monotonic() >= deadline:
+                timed_out = True
+                _stop_proc(proc)
+                break
+            time.sleep(0.2)
+
+        try:
+            out, err = proc.communicate(timeout=1)
+            stdout = out or ""
+            stderr = err or ""
+        except subprocess.TimeoutExpired:
+            _stop_proc(proc)
+            out, err = proc.communicate()
+            stdout = out or ""
+            stderr = err or ""
+
+        if timed_out:
+            exit_code = -1
+        elif stopped:
+            exit_code = 130
+            if not stderr:
+                stderr = "Stopped due to race winner."
+        else:
+            exit_code = proc.returncode if proc.returncode is not None else 1
+
+        wall_time = time.monotonic() - start
+        cost_result = None
+        if not no_cost and not stopped:
+            try:
+                cost_result = adapter.parse_cost(
+                    stdout,
+                    stderr,
+                    custom_pricing=custom_pricing,
+                )
+            except Exception:
+                cost_result = None
+
+        result = AgentResult(
+            agent=agent_name,
+            exit_code=exit_code,
+            stdout=stdout,
+            stderr=stderr,
+            wall_time=wall_time,
+            timed_out=timed_out,
+            cost_result=cost_result,
+        )
+        return result, stopped
 
     try:
         # Create branch first (from main repo)
@@ -97,13 +221,56 @@ def _run_agent_worktree(
         # Create worktree
         add_worktree(repo, worktree_dir, branch)
 
+        if status_callback:
+            status_callback("coding")
+
         adapter = ADAPTERS[agent_name]()
-        result = adapter.run(task_description, worktree_dir, timeout, no_cost=no_cost, custom_pricing=custom_pricing)
+        if stop_event is not None:
+            result, stopped = _run_adapter_with_stop_event()
+            metadata["stopped"] = stopped
+        else:
+            result = adapter.run(
+                task_description,
+                worktree_dir,
+                timeout,
+                no_cost=no_cost,
+                custom_pricing=custom_pricing,
+            )
+
+        verify_exit_codes: list[int] = []
+        verify_outputs: list[str] = []
+        verify_passed: bool | None = None
+        if (
+            verify_commands
+            and result.exit_code == 0
+            and not result.timed_out
+            and not bool(metadata.get("stopped", False))
+        ):
+            verify_passed = True
+            if status_callback:
+                status_callback("testing")
+            try:
+                if verify_files is not None:
+                    _write_verify_files(worktree_dir, verify_files)
+                for command in verify_commands:
+                    code, output = run_command(command, worktree_dir, timeout=timeout)
+                    verify_exit_codes.append(code)
+                    verify_outputs.append(output)
+                    if code != 0:
+                        verify_passed = False
+            except Exception as exc:
+                verify_passed = False
+                verify_exit_codes.append(-1)
+                verify_outputs.append(f"Failed to run verification tests: {exc}")
+
+        metadata["verify_passed"] = verify_passed
+        metadata["verify_exit_codes"] = verify_exit_codes
+        metadata["verify_outputs"] = verify_outputs
 
         _, lines = get_diff_stat(worktree_dir, base_ref)
-        return result, lines
+        return _return(result, lines)
     except Exception:
-        return None, 0
+        return _return(None, 0)
     finally:
         remove_worktree(repo, worktree_dir)
         # Clean up temp dir if it still exists

@@ -441,6 +441,37 @@ coderace run task.yaml --parallel
 
 Sequential mode (default) runs agents one at a time on the same repo.
 
+## Race Mode
+
+Use `coderace race` for first-to-pass execution. Unlike `coderace run --parallel`, race mode stops as soon as one agent passes the win condition:
+
+- If verification is configured, winner = first agent that passes verification.
+- If verification is not configured, winner = first agent that exits cleanly.
+- Remaining agents are stopped after a short graceful shutdown window.
+
+```bash
+coderace race task.yaml --agent claude --agent codex
+```
+
+Example terminal output:
+
+```text
+🏁 coderace race - fix-auth-bug
+Running 3 agents in parallel...
+
+Agent   Status                 Time
+claude  🔨 coding...           0:00:23
+codex   🧪 testing...          0:00:31
+aider   🛑 stopped             0:00:18
+
+🏆 Winner: codex - completed in 1:23 (first to pass verification)
+Runner-up: claude - finished 0:12 later
+```
+
+When to use each mode:
+- Use `coderace race` when you want the fastest successful patch and can stop early.
+- Use `coderace run --parallel` when you want full scoring across all agents before deciding.
+
 ## Why coderace?
 
 **Blog posts compare models. coderace compares agents on your work.**

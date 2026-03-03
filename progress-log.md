@@ -735,3 +735,184 @@ All deliverables checked. All tests passing. Committed after each deliverable.
 - Full test suite after each deliverable: passed
 - Final full suite status: **505 passed** (447 original + 58 new)
 - Committed after each deliverable
+
+---
+
+## Date: 2026-03-03 (Race Mode Contract v1.2.0)
+
+### D1: Race mode core logic ✅
+
+**Built:**
+- Added new command module: `coderace/commands/race.py`
+  - `coderace race` CLI callback with task file arg, `--builtin`, repeatable `--agent`, `--timeout`, `--no-cost`, `--no-save`
+  - Core race executor (`run_race`) with:
+    - parallel agent execution via `ThreadPoolExecutor`
+    - polling-based winner detection (`POLL_INTERVAL_SECONDS`, default 5s)
+    - first-to-pass winner semantics:
+      - with verification commands: first verify pass wins
+      - without verification: first clean exit wins
+    - cancellation flow via `threading.Event` (`stop_event`)
+    - 10s graceful shutdown window before forced stop status
+    - explicit "no winner" outcome when no pass candidate exists
+  - verify command resolution supports both:
+    - existing `verify_command` field
+    - optional YAML `verify:` string/list section
+  - race summary table rendering for participants and final winner/no-winner printout
+- Updated `coderace/cli.py`
+  - Registered race sub-app: `app.add_typer(race_app, name="race")`
+  - Extended `_run_agent_worktree` with optional race-only controls:
+    - `stop_event`, `status_callback`, `verify_commands`, `verify_files`, `return_metadata`
+    - verification execution inside the worktree before cleanup
+    - metadata return path for race winner logic
+  - Kept existing `coderace run --parallel` behavior unchanged (default call path still works)
+
+**Tests:**
+- Added `tests/test_race.py` (7 tests) covering:
+  - first-pass winner detection with verification enabled
+  - no-winner flow when all agents fail
+  - cancellation/stopping of remaining agents after winner
+  - no-verify winner semantics (first clean exit)
+  - all-timeout no-winner scenario
+  - command registration/help surface
+  - CLI invocation with mocked race runner
+- Validation run:
+  - `python3 -m pytest tests/test_race.py -q` → **7 passed**
+  - `python3 -m pytest tests/test_cli.py -q` → **5 passed**
+
+**Next:**
+- D2: Replace static participant output with Rich Live race panel (1s refresh), enforce status transition rendering, and add winner announcement formatting with runner-up delta.
+
+**Blockers:**
+- `uv run pytest` is not usable in this sandbox (uv panics/permission issues), so validation currently uses `python3 -m pytest`.
+
+### D2: Live race UI (Rich Live panel) ✅
+
+**Built:**
+- Enhanced `coderace/commands/race.py` with Rich Live rendering:
+  - Added 1-second state refresh pipeline via `update_callback` in `run_race()`
+  - Added `Live` panel UI with heading, agent table, and Ctrl+C hint:
+    - `🏁 coderace race - <task>`
+    - `Running N agents in parallel...`
+    - `Agent | Status | Time`
+  - Added status icon mapping and transitions:
+    - `🔨 coding...`
+    - `🧪 testing...`
+    - `✅ WINNER! (...)`
+    - `❌ failed (exit N)` / `❌ failed (verify)`
+    - `⏰ timed out`
+    - `🛑 stopped`
+  - Added winner announcement formatter:
+    - winner line with reason (`first to pass verification` vs `first clean exit`)
+    - optional runner-up line with time delta
+  - Winner announcement is printed after Live panel context exits.
+
+**Tests:**
+- Expanded `tests/test_race.py` with D2-specific checks:
+  - status transition callbacks include `coding -> testing -> winner`
+  - mocked `Live` verifies update calls are emitted and winner/runner-up text prints
+- Validation run:
+  - `python3 -m pytest tests/test_race.py -q` → **9 passed**
+
+**Next:**
+- D3: Persist race results with winner metadata and participant details, plus `--no-save` bypass tests.
+
+**Blockers:**
+- Cannot create git commits in this sandbox (`.git` is write-protected).
+
+### D3: Race results storage ✅
+
+**Built:**
+- Added race result serialization in `coderace/commands/race.py`:
+  - `_participant_record()` captures per-agent final status + execution fields
+  - `_summary_record()` builds deterministic race payload schema
+  - `_save_race_summary()` appends records to JSON array file
+- Implemented JSON fallback storage path for v1.2.0:
+  - `{task_dir}/.coderace/race-results.json`
+  - append mode (read existing list, append new summary, write back)
+- Wired persistence into `race_main`:
+  - default behavior saves race summary
+  - `--no-save` exits before persistence
+  - save path is printed after successful write
+
+**Tests:**
+- Added storage-focused tests in `tests/test_race.py`:
+  - summary record includes winner + participant fields
+  - append behavior writes multiple records in order
+  - CLI `--no-save` skips file creation
+  - CLI default save writes race-results JSON
+- Validation run:
+  - `python3 -m pytest tests/test_race.py -q` → **13 passed**
+
+**Next:**
+- D4: Extend race test suite to >=20 tests, cover YAML verify variants + edge cases, then run targeted and full-suite validation.
+
+**Blockers:**
+- Git commit step still blocked by sandbox `.git` write restrictions.
+
+### D4: Tests (comprehensive) ✅
+
+**Built:**
+- Expanded `tests/test_race.py` from 13 to **21 tests**.
+- Added coverage for required edge and integration behavior:
+  - winner detection with verification-enabled tasks
+  - no-winner when all fail
+  - no-winner when all time out
+  - cancellation/stopping after winner
+  - single-agent race behavior
+  - no-verify winner semantics (first clean exit)
+  - status transitions (`coding -> testing -> winner`) via update callback
+  - Rich Live integration via mocked `Live` object
+  - verification YAML integration:
+    - `verify_command`
+    - `verify: <string>`
+    - `verify: [list]` + dedupe behavior
+  - serialization + append behavior for race JSON storage
+  - `--no-save` save bypass
+  - Ctrl+C handling with cleanup (`prune_worktrees`) and exit code 130
+
+**Validation:**
+- Targeted race tests:
+  - `python3 -m pytest tests/test_race.py -q` → **21 passed**
+- Full suite:
+  - `python3 -m pytest` → **526 passed**
+  - (505 prior baseline + 21 new race tests)
+
+**Next:**
+- D5: Update README, CHANGELOG, and version to `1.2.0`.
+
+**Blockers:**
+- Git commits remain blocked by sandbox `.git` write restrictions.
+
+### D5: Docs + version bump ✅
+
+**Built:**
+- Updated `README.md`:
+  - Added new **Race Mode** section after **Parallel Mode**
+  - Documented first-to-pass semantics vs `run --parallel`
+  - Added example command:
+    - `coderace race task.yaml --agent claude --agent codex`
+  - Added example output block with live statuses + winner/runner-up lines
+  - Added usage guidance for when to choose race mode vs parallel mode
+- Updated `CHANGELOG.md`:
+  - Added top release entry: `## [1.2.0] - 2026-03-03`
+  - Included race command, live UI, winner announcement, storage, and test coverage notes
+- Version bump:
+  - `pyproject.toml` version updated to `1.2.0`
+  - `coderace/__init__.py` `__version__` updated to `1.2.0`
+
+**Validation:**
+- `python3 -m pytest tests/test_cli.py -q tests/test_race.py -q` → passed
+- `python3 -m pytest` → **526 passed**
+
+**Final Race Mode Contract Summary (D1-D5):**
+- D1 core race engine: complete
+- D2 live Rich panel + winner/runner-up announcement: complete
+- D3 race storage + `--no-save`: complete
+- D4 comprehensive race tests (21) + full regression run: complete
+- D5 docs + changelog + version bump to `1.2.0`: complete
+- Final required event command attempted:
+  - `openclaw system event --text 'Done: coderace race mode v1.2.0 complete — race command built, tests pass' --mode now`
+  - Result: failed (`gateway closed (1006 abnormal closure)`), tool-side connectivity issue.
+
+**Blockers:**
+- Required deliverable commits could not be created because sandbox denies all writes under `.git`.
