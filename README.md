@@ -1,5 +1,10 @@
 # coderace
 
+[![PyPI](https://img.shields.io/pypi/v/coderace)](https://pypi.org/project/coderace/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#install)
+[![Tests](https://img.shields.io/badge/tests-526%20passing-brightgreen)](#)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
+
 Stop reading blog comparisons. Race coding agents against each other on real tasks in *your* repo with *your* code.
 
 Every week there's a new "Claude Code vs Codex vs Cursor" post. They test on toy problems with cherry-picked examples. coderace gives you automated, reproducible, scored comparisons on the tasks you actually care about.
