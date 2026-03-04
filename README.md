@@ -824,3 +824,6 @@ coderace context-eval --context-file v2-claude.md --task task.yaml --agents clau
 ## See Also
 
 - **[agentmd](https://github.com/mikiships/agentmd)** — Generate and score context files (CLAUDE.md, AGENTS.md, .cursorrules) for AI coding agents. Pair with coderace: generate context with agentmd, measure agent performance with coderace, iterate with data instead of vibes.
+- **[agentlint](https://github.com/mikiships/agentlint)** — Lint AI agent git diffs for risky patterns (scope drift, secret leaks, test regression). Static analysis, no LLM required.
+
+Measure (coderace) → Optimize (agentmd) → Guard (agentlint).
