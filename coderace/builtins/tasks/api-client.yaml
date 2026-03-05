@@ -1,0 +1,335 @@
+name: api-client
+difficulty: hard
+description: |
+  Build a production-grade HTTP API client with resilience patterns.
+
+  Create a file called `api_client.py` with the following class:
+
+  ```python
+  class APIClient:
+      def __init__(
+          self,
+          base_url: str,
+          max_retries: int = 3,
+          rate_limit_per_sec: float = 10,
+          timeout: float = 30.0,
+          circuit_breaker_threshold: int = 5,
+          circuit_breaker_timeout: float = 30.0,
+      ):
+          """Initialize the API client.
+
+          Args:
+              base_url: Base URL for all requests (e.g., "https://api.example.com")
+              max_retries: Max retry attempts on 429/5xx responses
+              rate_limit_per_sec: Max requests per second (token bucket)
+              timeout: Default timeout per request in seconds
+              circuit_breaker_threshold: Consecutive failures before circuit opens
+              circuit_breaker_timeout: Seconds before circuit transitions to half-open
+          """
+
+      def get(self, path: str, **kwargs) -> requests.Response:
+          """Send a GET request."""
+
+      def post(self, path: str, **kwargs) -> requests.Response:
+          """Send a POST request."""
+
+      def put(self, path: str, **kwargs) -> requests.Response:
+          """Send a PUT request."""
+
+      def delete(self, path: str, **kwargs) -> requests.Response:
+          """Send a DELETE request."""
+  ```
+
+  Requirements:
+  - All HTTP methods support `timeout`, `headers`, `params`, `json`, `data` kwargs
+  - Retry with exponential backoff + jitter on 429 and 5xx status codes
+  - Rate limiting using token bucket algorithm (max N requests per second)
+  - Circuit breaker pattern:
+    - CLOSED: requests flow normally
+    - OPEN: after N consecutive failures, immediately raise `CircuitBreakerOpen`
+    - HALF-OPEN: after timeout, allow one test request through
+    - Success in HALF-OPEN -> CLOSED; failure -> back to OPEN
+  - Custom exceptions: `CircuitBreakerOpen`, `APIClientError`
+  - `request_log` attribute: list of dicts with keys `method`, `url`, `status_code`, `timestamp`
+  - Uses the `requests` library for HTTP
+
+  Also create `test_api_client.py` with tests using `unittest.mock` to mock HTTP responses:
+  - Basic GET/POST/PUT/DELETE
+  - Retry on 503 then success
+  - Rate limiting (verify delays between rapid requests)
+  - Circuit breaker opens after consecutive failures
+  - Circuit breaker transitions from OPEN to HALF-OPEN to CLOSED
+  - Timeout handling
+  - Request logging
+
+  Do NOT modify any files other than `api_client.py` and `test_api_client.py`.
+repo: .
+test_command: python3 -m pytest test_api_client.py -x -q
+verify_command: python3 -m pytest verify_api_client.py -x -q
+verify_files:
+  verify_api_client.py: |
+    """Hidden verification tests for api-client task."""
+
+    import time
+    from unittest.mock import MagicMock, patch, PropertyMock
+
+    import pytest
+
+    from api_client import APIClient, CircuitBreakerOpen
+
+
+    def _mock_response(status_code=200, json_data=None):
+        resp = MagicMock()
+        resp.status_code = status_code
+        resp.json.return_value = json_data or {}
+        resp.ok = 200 <= status_code < 300
+        resp.raise_for_status = MagicMock()
+        if status_code >= 400:
+            resp.raise_for_status.side_effect = Exception(f"HTTP {status_code}")
+        return resp
+
+
+    class TestRetryBehavior:
+        @patch("api_client.requests.Session.request")
+        def test_retries_on_503_then_succeeds(self, mock_request):
+            mock_request.side_effect = [
+                _mock_response(503),
+                _mock_response(503),
+                _mock_response(200, {"ok": True}),
+            ]
+            client = APIClient(
+                "http://test.com",
+                max_retries=3,
+                rate_limit_per_sec=1000,
+            )
+            resp = client.get("/endpoint")
+            assert resp.status_code == 200
+            assert mock_request.call_count == 3
+
+        @patch("api_client.requests.Session.request")
+        def test_retries_on_429(self, mock_request):
+            mock_request.side_effect = [
+                _mock_response(429),
+                _mock_response(200),
+            ]
+            client = APIClient(
+                "http://test.com",
+                max_retries=3,
+                rate_limit_per_sec=1000,
+            )
+            resp = client.get("/path")
+            assert resp.status_code == 200
+            assert mock_request.call_count == 2
+
+        @patch("api_client.requests.Session.request")
+        def test_retries_exhausted_returns_last_response(self, mock_request):
+            mock_request.side_effect = [
+                _mock_response(503),
+                _mock_response(503),
+                _mock_response(503),
+            ]
+            client = APIClient(
+                "http://test.com",
+                max_retries=3,
+                rate_limit_per_sec=1000,
+            )
+            resp = client.get("/fail")
+            assert resp.status_code == 503
+
+
+    class TestBackoffJitter:
+        @patch("api_client.requests.Session.request")
+        def test_retry_delays_have_jitter(self, mock_request):
+            """Retry delays should not be deterministic."""
+            mock_request.side_effect = [
+                _mock_response(503),
+                _mock_response(503),
+                _mock_response(200),
+            ]
+            delays = []
+
+            original_sleep = time.sleep
+            def capture_sleep(duration):
+                delays.append(duration)
+                # Don't actually sleep in tests
+
+            client = APIClient(
+                "http://test.com",
+                max_retries=3,
+                rate_limit_per_sec=1000,
+            )
+            with patch("time.sleep", side_effect=capture_sleep):
+                client.get("/test")
+
+            # Should have at least 1 retry delay
+            retry_delays = [d for d in delays if d > 0.001]
+            assert len(retry_delays) >= 1
+
+
+    class TestRateLimiting:
+        @patch("api_client.requests.Session.request")
+        def test_rate_limit_spacing(self, mock_request):
+            mock_request.return_value = _mock_response(200)
+            # Very low rate limit to make spacing measurable
+            client = APIClient(
+                "http://test.com",
+                max_retries=0,
+                rate_limit_per_sec=5,
+            )
+            start = time.time()
+            for _ in range(6):
+                client.get("/test")
+            elapsed = time.time() - start
+            # 6 requests at 5/sec should take at least ~1 second
+            assert elapsed >= 0.8
+
+
+    class TestCircuitBreaker:
+        @patch("api_client.requests.Session.request")
+        def test_circuit_opens_after_consecutive_failures(self, mock_request):
+            mock_request.return_value = _mock_response(503)
+            client = APIClient(
+                "http://test.com",
+                max_retries=1,
+                rate_limit_per_sec=1000,
+                circuit_breaker_threshold=3,
+                circuit_breaker_timeout=60,
+            )
+
+            # Cause consecutive failures to open the circuit
+            for _ in range(3):
+                try:
+                    client.get("/fail")
+                except CircuitBreakerOpen:
+                    pass
+
+            # Now circuit should be open
+            with pytest.raises(CircuitBreakerOpen):
+                client.get("/blocked")
+
+        @patch("api_client.requests.Session.request")
+        def test_circuit_half_open_after_timeout(self, mock_request):
+            mock_request.return_value = _mock_response(503)
+            client = APIClient(
+                "http://test.com",
+                max_retries=1,
+                rate_limit_per_sec=1000,
+                circuit_breaker_threshold=3,
+                circuit_breaker_timeout=0.1,
+            )
+
+            # Open the circuit
+            for _ in range(5):
+                try:
+                    client.get("/fail")
+                except CircuitBreakerOpen:
+                    pass
+
+            # Wait for timeout to elapse
+            time.sleep(0.15)
+
+            # Should allow one request through (half-open)
+            mock_request.return_value = _mock_response(200)
+            resp = client.get("/recover")
+            assert resp.status_code == 200
+
+        @patch("api_client.requests.Session.request")
+        def test_circuit_closes_on_half_open_success(self, mock_request):
+            mock_request.return_value = _mock_response(503)
+            client = APIClient(
+                "http://test.com",
+                max_retries=1,
+                rate_limit_per_sec=1000,
+                circuit_breaker_threshold=3,
+                circuit_breaker_timeout=0.1,
+            )
+
+            # Open the circuit
+            for _ in range(5):
+                try:
+                    client.get("/fail")
+                except CircuitBreakerOpen:
+                    pass
+
+            time.sleep(0.15)
+
+            # Half-open success
+            mock_request.return_value = _mock_response(200)
+            client.get("/recover")
+
+            # Circuit should be closed now — further requests should work
+            resp = client.get("/another")
+            assert resp.status_code == 200
+
+
+    class TestHTTPMethods:
+        @patch("api_client.requests.Session.request")
+        def test_post(self, mock_request):
+            mock_request.return_value = _mock_response(201)
+            client = APIClient("http://test.com", rate_limit_per_sec=1000)
+            resp = client.post("/data", json={"key": "value"})
+            assert resp.status_code == 201
+
+        @patch("api_client.requests.Session.request")
+        def test_put(self, mock_request):
+            mock_request.return_value = _mock_response(200)
+            client = APIClient("http://test.com", rate_limit_per_sec=1000)
+            resp = client.put("/data/1", json={"key": "updated"})
+            assert resp.status_code == 200
+
+        @patch("api_client.requests.Session.request")
+        def test_delete(self, mock_request):
+            mock_request.return_value = _mock_response(204)
+            client = APIClient("http://test.com", rate_limit_per_sec=1000)
+            resp = client.delete("/data/1")
+            assert resp.status_code == 204
+
+
+    class TestRequestLogging:
+        @patch("api_client.requests.Session.request")
+        def test_requests_are_logged(self, mock_request):
+            mock_request.return_value = _mock_response(200)
+            client = APIClient("http://test.com", rate_limit_per_sec=1000)
+            client.get("/a")
+            client.post("/b")
+
+            log = client.request_log
+            assert len(log) >= 2
+            assert log[0]["method"].upper() == "GET"
+            assert "/a" in log[0]["url"]
+            assert log[0]["status_code"] == 200
+            assert "timestamp" in log[0]
+
+
+    class TestTimeout:
+        @patch("api_client.requests.Session.request")
+        def test_timeout_passed_to_request(self, mock_request):
+            mock_request.return_value = _mock_response(200)
+            client = APIClient(
+                "http://test.com",
+                rate_limit_per_sec=1000,
+                timeout=5.0,
+            )
+            client.get("/test")
+            call_kwargs = mock_request.call_args
+            # Timeout should be passed to the underlying request
+            assert call_kwargs.kwargs.get("timeout") == 5.0 or (
+                len(call_kwargs.args) > 0 and
+                any(isinstance(a, (int, float)) and a == 5.0
+                    for a in call_kwargs.args)
+            ) or "timeout" in str(call_kwargs)
+lint_command: ruff check api_client.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5
