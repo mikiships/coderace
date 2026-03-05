@@ -1,0 +1,444 @@
+name: bug-hunt
+difficulty: hard
+description: |
+  Debug and fix a buggy calculator module. The file `buggy_calculator.py` below has
+  5 planted bugs. Your job is to find and fix ALL of them. Do NOT rewrite from scratch —
+  preserve the existing structure and function signatures.
+
+  Create a file called `buggy_calculator.py` with the following content (this is the
+  buggy version you must fix):
+
+  ```python
+  """Advanced calculator with expression parsing, variables, and functions."""
+
+  import math
+
+
+  class CalculatorError(Exception):
+      """Base error for calculator operations."""
+      pass
+
+
+  class Calculator:
+      """A calculator that evaluates mathematical expressions with variables and functions."""
+
+      FUNCTIONS = {
+          "sqrt": math.sqrt,
+          "abs": abs,
+          "min": min,
+          "max": max,
+      }
+
+      def __init__(self):
+          self.variables = {}
+
+      def evaluate(self, expression):
+          """Evaluate a mathematical expression string and return the result."""
+          expression = expression.strip()
+          if not expression:
+              raise CalculatorError("Empty expression")
+
+          # Check for variable assignment
+          if "=" in expression and not any(
+              expression[i : i + 2] in ("==", "!=", "<=", ">=")
+              for i in range(len(expression) - 1)
+          ):
+              return self._handle_assignment(expression)
+
+          tokens = self._tokenize(expression)
+          pos = [0]
+          result = self._parse_expression(tokens, pos)
+          if pos[0] != len(tokens):
+              raise CalculatorError(f"Unexpected token: {tokens[pos[0]]}")
+          return result
+
+      def _handle_assignment(self, expression):
+          """Handle variable assignment like 'x = 5'."""
+          parts = expression.split("=", 1)
+          name = parts[0].strip()
+          if not name.isidentifier():
+              raise CalculatorError(f"Invalid variable name: {name}")
+          # BUG 3: Variable assignment overwrites built-in functions
+          value = self.evaluate(parts[1].strip())
+          self.variables[name] = value
+          return value
+
+      def _tokenize(self, expression):
+          """Convert expression string into a list of tokens."""
+          tokens = []
+          i = 0
+          while i < len(expression):
+              ch = expression[i]
+
+              if ch.isspace():
+                  i += 1
+                  continue
+
+              if ch.isdigit() or ch == ".":
+                  start = i
+                  while i < len(expression) and (expression[i].isdigit() or expression[i] == "."):
+                      i += 1
+                  tokens.append(("NUMBER", float(expression[start:i])))
+                  continue
+
+              if ch.isalpha() or ch == "_":
+                  start = i
+                  while i < len(expression) and (expression[i].isalnum() or expression[i] == "_"):
+                      i += 1
+                  tokens.append(("IDENT", expression[start:i]))
+                  continue
+
+              if ch in "+-*/()^,":
+                  tokens.append(("OP", ch))
+                  i += 1
+                  continue
+
+              if ch == "*" and i + 1 < len(expression) and expression[i + 1] == "*":
+                  tokens.append(("OP", "**"))
+                  i += 2
+                  continue
+
+              raise CalculatorError(f"Unknown character: {ch}")
+          return tokens
+
+      def _parse_expression(self, tokens, pos):
+          """Parse addition and subtraction."""
+          left = self._parse_term(tokens, pos)
+          while pos[0] < len(tokens) and tokens[pos[0]] == ("OP", "+") or (
+              pos[0] < len(tokens) and tokens[pos[0]] == ("OP", "-")
+          ):
+              op = tokens[pos[0]][1]
+              pos[0] += 1
+              right = self._parse_term(tokens, pos)
+              if op == "+":
+                  left = left + right
+              else:
+                  left = left - right
+          return left
+
+      def _parse_term(self, tokens, pos):
+          """Parse multiplication and division."""
+          left = self._parse_power(tokens, pos)
+          while pos[0] < len(tokens) and tokens[pos[0]][0] == "OP" and tokens[pos[0]][1] in ("*", "/"):
+              op = tokens[pos[0]][1]
+              pos[0] += 1
+              right = self._parse_power(tokens, pos)
+              if op == "*":
+                  left = left * right
+              else:
+                  # BUG 1: Integer division instead of float division
+                  left = left // right
+          return left
+
+      def _parse_power(self, tokens, pos):
+          """Parse exponentiation (right-associative)."""
+          base = self._parse_unary(tokens, pos)
+          if pos[0] < len(tokens) and tokens[pos[0]] == ("OP", "^"):
+              pos[0] += 1
+              exp = self._parse_power(tokens, pos)
+              base = base ** exp
+          return base
+
+      def _parse_unary(self, tokens, pos):
+          """Parse unary operators."""
+          # BUG 2: Does not handle unary minus
+          return self._parse_primary(tokens, pos)
+
+      def _parse_primary(self, tokens, pos):
+          """Parse primary expressions: numbers, variables, functions, parenthesized expressions."""
+          if pos[0] >= len(tokens):
+              raise CalculatorError("Unexpected end of expression")
+
+          token = tokens[pos[0]]
+
+          if token[0] == "NUMBER":
+              pos[0] += 1
+              return token[1]
+
+          if token[0] == "IDENT":
+              name = token[1]
+              pos[0] += 1
+
+              # Check if it's a function call
+              if pos[0] < len(tokens) and tokens[pos[0]] == ("OP", "("):
+                  return self._parse_function_call(name, tokens, pos)
+
+              # Check variables first, then functions (BUG 3 manifests here)
+              if name in self.variables:
+                  return self.variables[name]
+
+              if name in self.FUNCTIONS:
+                  raise CalculatorError(f"Function {name} requires parentheses")
+
+              raise CalculatorError(f"Undefined variable: {name}")
+
+          if token == ("OP", "("):
+              pos[0] += 1
+              result = self._parse_expression(tokens, pos)
+              # BUG 5: Off-by-one in closing paren detection
+              if pos[0] < len(tokens) and tokens[pos[0]] == ("OP", ")"):
+                  pos[0] += 1
+              return result
+
+          raise CalculatorError(f"Unexpected token: {token}")
+
+      def _parse_function_call(self, name, tokens, pos):
+          """Parse a function call like sqrt(9) or min(a, b)."""
+          if name not in self.FUNCTIONS:
+              raise CalculatorError(f"Unknown function: {name}")
+
+          pos[0] += 1  # skip '('
+          args = []
+          if pos[0] < len(tokens) and tokens[pos[0]] != ("OP", ")"):
+              args.append(self._parse_expression(tokens, pos))
+              while pos[0] < len(tokens) and tokens[pos[0]] == ("OP", ","):
+                  pos[0] += 1
+                  args.append(self._parse_expression(tokens, pos))
+
+          if pos[0] >= len(tokens) or tokens[pos[0]] != ("OP", ")"):
+              raise CalculatorError(f"Missing closing parenthesis for {name}")
+          pos[0] += 1
+
+          func = self.FUNCTIONS[name]
+
+          # BUG 4: min(a, b) returns max (arguments reversed for min)
+          if name == "min":
+              if len(args) != 2:
+                  raise CalculatorError("min() requires exactly 2 arguments")
+              return func(args[1], args[0])
+
+          if name == "max":
+              if len(args) != 2:
+                  raise CalculatorError("max() requires exactly 2 arguments")
+              return func(args[0], args[1])
+
+          if len(args) != 1:
+              raise CalculatorError(f"{name}() requires exactly 1 argument")
+          return func(args[0])
+  ```
+
+  Also create a file called `test_buggy_calculator.py` with the following tests that
+  demonstrate the bugs:
+
+  ```python
+  """Tests that expose bugs in buggy_calculator.py."""
+
+  import pytest
+  from buggy_calculator import Calculator, CalculatorError
+
+
+  @pytest.fixture
+  def calc():
+      return Calculator()
+
+
+  def test_basic_addition(calc):
+      assert calc.evaluate("2 + 3") == 5
+
+
+  def test_basic_multiplication(calc):
+      assert calc.evaluate("3 * 4") == 12
+
+
+  def test_division_returns_float(calc):
+      """BUG 1: Division should return float, not integer."""
+      assert calc.evaluate("7 / 2") == 3.5
+
+
+  def test_negative_number_in_expression(calc):
+      """BUG 2: Unary minus should work."""
+      assert calc.evaluate("-5 + 3") == -2
+
+
+  def test_variable_does_not_shadow_function(calc):
+      """BUG 3: Assigning to 'sqrt' should not break sqrt function."""
+      calc.evaluate("sqrt = 10")
+      assert calc.evaluate("sqrt(16)") == 4.0
+
+
+  def test_min_returns_smaller(calc):
+      """BUG 4: min(3, 7) should return 3."""
+      assert calc.evaluate("min(3, 7)") == 3
+
+
+  def test_parenthesized_expression(calc):
+      """BUG 5: Parenthesized expressions must require closing paren."""
+      with pytest.raises(CalculatorError):
+          calc.evaluate("(3 + 4")
+
+
+  def test_nested_parens(calc):
+      assert calc.evaluate("((2 + 3) * 4)") == 20
+  ```
+
+  Fix ALL 5 bugs in `buggy_calculator.py`. Do NOT rewrite from scratch — keep the
+  existing class structure, method names, and overall design.
+
+  The 5 bugs are:
+  1. Division uses integer division (`//`) instead of float division (`/`)
+  2. Unary minus is not handled in `_parse_unary`
+  3. Variable assignment can overwrite built-in function names
+  4. `min()` has its arguments reversed
+  5. Missing closing parenthesis is not detected (off-by-one)
+
+  Do NOT modify `test_buggy_calculator.py`. Do NOT modify any other files.
+repo: .
+test_command: python3 -m pytest test_buggy_calculator.py -x -q
+verify_command: python3 -m pytest verify_bug_hunt.py -x -q
+verify_files:
+  verify_bug_hunt.py: |
+    """Hidden verification tests for bug-hunt task."""
+
+    import ast
+    import inspect
+    import math
+
+    import pytest
+
+    from buggy_calculator import Calculator, CalculatorError
+
+
+    @pytest.fixture
+    def calc():
+        return Calculator()
+
+
+    # --- Bug 1: Division must return float ---
+
+    def test_division_float_result(calc):
+        assert calc.evaluate("7 / 2") == 3.5
+
+    def test_division_exact(calc):
+        assert calc.evaluate("10 / 4") == 2.5
+
+    def test_division_chain(calc):
+        assert calc.evaluate("100 / 3 / 2") == pytest.approx(100 / 3 / 2)
+
+
+    # --- Bug 2: Unary minus ---
+
+    def test_unary_minus_simple(calc):
+        assert calc.evaluate("-5") == -5
+
+    def test_unary_minus_in_expression(calc):
+        assert calc.evaluate("-5 + 3") == -2
+
+    def test_unary_minus_with_multiply(calc):
+        assert calc.evaluate("-3 * 2") == -6
+
+    def test_double_negative(calc):
+        assert calc.evaluate("--5") == 5
+
+    def test_unary_minus_in_parens(calc):
+        assert calc.evaluate("(-3 + 1)") == -2
+
+    def test_negative_after_operator(calc):
+        assert calc.evaluate("10 + -3") == 7
+
+
+    # --- Bug 3: Variable assignment must not overwrite functions ---
+
+    def test_variable_named_sqrt_does_not_break_function(calc):
+        calc.evaluate("sqrt = 100")
+        assert calc.evaluate("sqrt(16)") == 4.0
+
+    def test_variable_named_abs_does_not_break_function(calc):
+        calc.evaluate("abs = 42")
+        assert calc.evaluate("abs(-7)") == 7
+
+    def test_variable_named_min_does_not_break_function(calc):
+        calc.evaluate("min = 0")
+        assert calc.evaluate("min(5, 3)") == 3
+
+    def test_variable_with_function_name_still_accessible(calc):
+        calc.evaluate("sqrt = 99")
+        assert calc.evaluate("sqrt") == 99
+
+
+    # --- Bug 4: min() must return minimum ---
+
+    def test_min_basic(calc):
+        assert calc.evaluate("min(3, 7)") == 3
+
+    def test_min_reversed_args(calc):
+        assert calc.evaluate("min(7, 3)") == 3
+
+    def test_min_equal(calc):
+        assert calc.evaluate("min(5, 5)") == 5
+
+    def test_min_negative(calc):
+        assert calc.evaluate("min(-1, 1)") == -1
+
+    def test_max_still_works(calc):
+        assert calc.evaluate("max(3, 7)") == 7
+
+
+    # --- Bug 5: Parenthesized expressions must detect missing close paren ---
+
+    def test_missing_close_paren_raises(calc):
+        with pytest.raises(CalculatorError):
+            calc.evaluate("(3 + 4")
+
+    def test_nested_missing_close_paren_raises(calc):
+        with pytest.raises(CalculatorError):
+            calc.evaluate("((3 + 4)")
+
+    def test_valid_nested_parens(calc):
+        assert calc.evaluate("((2 + 3) * 4)") == 20
+
+    def test_deeply_nested(calc):
+        assert calc.evaluate("(((1 + 2)))") == 3
+
+
+    # --- Non-rewrite check: verify original structure preserved ---
+
+    def test_class_structure_preserved():
+        """Verify the code was fixed, not rewritten from scratch."""
+        source = inspect.getsource(Calculator)
+        tree = ast.parse(source)
+        cls = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)][0]
+        method_names = {n.name for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        required_methods = {
+            "__init__", "evaluate", "_handle_assignment",
+            "_tokenize", "_parse_expression", "_parse_term",
+            "_parse_power", "_parse_unary", "_parse_primary",
+            "_parse_function_call",
+        }
+        missing = required_methods - method_names
+        assert not missing, f"Missing methods (code was rewritten?): {missing}"
+
+    def test_calculator_error_class_exists():
+        assert issubclass(CalculatorError, Exception)
+
+
+    # --- Edge cases: complex expressions ---
+
+    def test_expression_with_all_features(calc):
+        calc.evaluate("x = 3")
+        calc.evaluate("y = 4")
+        result = calc.evaluate("sqrt(x ^ 2 + y ^ 2)")
+        assert result == pytest.approx(5.0)
+
+    def test_nested_function_calls(calc):
+        assert calc.evaluate("abs(-sqrt(16))") == pytest.approx(4.0)
+
+    def test_complex_arithmetic(calc):
+        assert calc.evaluate("(2 + 3) * (4 - 1) / 3") == pytest.approx(5.0)
+
+    def test_power_with_division(calc):
+        assert calc.evaluate("2 ^ 3 / 4") == pytest.approx(2.0)
+lint_command: ruff check buggy_calculator.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5
