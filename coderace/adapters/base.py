@@ -17,8 +17,12 @@ class BaseAdapter(ABC):
 
     name: str = "base"
 
+    def __init__(self, model: Optional[str] = None) -> None:
+        """Initialize adapter with optional model override."""
+        self.model = model
+
     @abstractmethod
-    def build_command(self, task_description: str) -> list[str]:
+    def build_command(self, task_description: str, model: Optional[str] = None) -> list[str]:
         """Build the CLI command to invoke this agent."""
         ...
 
@@ -44,7 +48,8 @@ class BaseAdapter(ABC):
         custom_pricing: dict[str, tuple[float, float]] | None = None,
     ) -> AgentResult:
         """Run the agent on a task and capture results."""
-        cmd = self.build_command(task_description)
+        model = self.model
+        cmd = self.build_command(task_description, model=model)
         start = time.monotonic()
         timed_out = False
 
@@ -76,7 +81,12 @@ class BaseAdapter(ABC):
         cost_result: Optional[CostResult] = None
         if not no_cost:
             try:
-                cost_result = self.parse_cost(stdout, stderr, custom_pricing=custom_pricing)
+                cost_result = self.parse_cost(
+                    stdout,
+                    stderr,
+                    model_name=model or "",
+                    custom_pricing=custom_pricing,
+                )
             except Exception:
                 pass
 
