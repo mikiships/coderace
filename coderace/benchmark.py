@@ -252,11 +252,12 @@ def _run_single_agent(
     total_trials: int,
 ) -> TaskAgentResult:
     """Run a single (task, agent) pair and return the result."""
-    from coderace.adapters import ADAPTERS
+    from coderace.adapters import ADAPTERS, instantiate_adapter, parse_agent_spec
     from coderace.git_ops import branch_name_for, checkout, create_branch, get_diff_stat
     from coderace.scorer import compute_score
 
     repo = task.repo
+    agent_base, _agent_model = parse_agent_spec(agent)
 
     if progress_callback:
         progress_callback(
@@ -265,7 +266,7 @@ def _run_single_agent(
             _format_trial_status("running", trial_number, total_trials),
         )
 
-    if agent not in ADAPTERS:
+    if agent_base not in ADAPTERS:
         if progress_callback:
             progress_callback(
                 task_name,
@@ -285,7 +286,8 @@ def _run_single_agent(
             error=f"Unknown agent: {agent}",
         )
 
-    branch = branch_name_for(task_name, agent) + f"-bench"
+    branch_key = agent.replace(":", "-").replace(" ", "_")
+    branch = branch_name_for(task_name, branch_key) + f"-bench"
     try:
         # Delete stale branch from previous runs if it exists
         import subprocess as _sp
@@ -312,7 +314,7 @@ def _run_single_agent(
         )
 
     try:
-        adapter = ADAPTERS[agent]()
+        adapter = instantiate_adapter(agent)
         agent_result = adapter.run(task.description, repo, timeout)
         _, lines = get_diff_stat(repo, base_ref)
 
@@ -345,7 +347,7 @@ def _run_single_agent(
 
         return TaskAgentResult(
             task_name=task_name,
-            agent=agent,
+            agent=agent_result.agent,  # use display name (e.g. "codex (gpt-5.4)")
             trial_number=trial_number,
             score=score.composite,
             wall_time=agent_result.wall_time,
@@ -427,7 +429,7 @@ def _run_task_parallel(
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from pathlib import Path
 
-    from coderace.adapters import ADAPTERS
+    from coderace.adapters import ADAPTERS, instantiate_adapter, parse_agent_spec
     from coderace.git_ops import (
         add_worktree,
         branch_name_for,
@@ -442,7 +444,8 @@ def _run_task_parallel(
     repo = task.repo
 
     def run_in_worktree(agent: str) -> TaskAgentResult:
-        if agent not in ADAPTERS:
+        agent_base, _agent_model = parse_agent_spec(agent)
+        if agent_base not in ADAPTERS:
             return TaskAgentResult(
                 task_name=task_name, agent=agent, trial_number=trial_number,
                 score=0.0, wall_time=0.0,
@@ -450,8 +453,9 @@ def _run_task_parallel(
                 timed_out=False, error=f"Unknown agent: {agent}",
             )
 
-        worktree_dir = Path(tempfile.mkdtemp(prefix=f"coderace-bench-{agent}-"))
-        branch = branch_name_for(task_name, agent) + "-bench"
+        branch_key = agent.replace(":", "-").replace(" ", "_")
+        worktree_dir = Path(tempfile.mkdtemp(prefix=f"coderace-bench-{branch_key}-"))
+        branch = branch_name_for(task_name, branch_key) + "-bench"
         try:
             # Delete stale branch from previous runs if it exists
             import subprocess as _sp2
@@ -467,7 +471,7 @@ def _run_task_parallel(
                     _format_trial_status("running", trial_number, total_trials),
                 )
 
-            adapter = ADAPTERS[agent]()
+            adapter = instantiate_adapter(agent)
             agent_result = adapter.run(task.description, worktree_dir, timeout)
             _, lines = get_diff_stat(worktree_dir, base_ref)
 
@@ -497,7 +501,9 @@ def _run_task_parallel(
                 )
 
             return TaskAgentResult(
-                task_name=task_name, agent=agent, trial_number=trial_number,
+                task_name=task_name,
+                agent=agent_result.agent,  # display name (e.g. "codex (gpt-5.4)")
+                trial_number=trial_number,
                 score=score.composite, wall_time=agent_result.wall_time,
                 tests_pass=score.breakdown.tests_pass,
                 exit_clean=score.breakdown.exit_clean,

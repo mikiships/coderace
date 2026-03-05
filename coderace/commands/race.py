@@ -21,7 +21,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from coderace.adapters import ADAPTERS
+from coderace.adapters import ADAPTERS, parse_agent_spec
 from coderace.git_ops import (
     branch_name_for,
     get_current_ref,
@@ -568,7 +568,7 @@ def race_main(
         console.print("[red]Repo has uncommitted changes. Commit or stash first.[/red]")
         raise typer.Exit(1)
 
-    valid_agents = [a for a in task.agents if a in ADAPTERS]
+    valid_agents = [a for a in task.agents if parse_agent_spec(a)[0] in ADAPTERS]
     invalid_agents = set(task.agents) - set(valid_agents)
     for name in invalid_agents:
         console.print(f"[red]Unknown agent: {name}[/red]")
