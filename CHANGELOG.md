@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.0] - 2026-03-05
+
+### Added
+- **4 new benchmark tasks** testing real-world coding skills beyond "build from scratch":
+  - `bug-hunt`: Find and fix 5 planted bugs in a calculator module (debugging)
+  - `refactor`: Improve messy code while keeping existing tests passing (refactoring)
+  - `concurrent-queue`: Thread-safe priority queue with producer/consumer pattern (concurrency)
+  - `api-client`: HTTP client with retry, rate limiting, and circuit breaker (API design)
+- Total built-in tasks: 20 (up from 16)
+
 ## [1.3.0] - 2026-03-05
 
 ### Added

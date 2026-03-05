@@ -187,6 +187,10 @@ coderace run --builtin fibonacci
 | `url-router` | Hard | HTTP-style router with params, wildcard, and 405/404 logic |
 | `diff-algorithm` | Hard | Unified diff + patch application roundtrip checks |
 | `task-scheduler` | Hard | Dependency-aware priority scheduler with timeout handling |
+| `bug-hunt` | Hard | Find and fix 5 planted bugs in a calculator module |
+| `refactor` | Hard | Refactor messy code while keeping tests passing |
+| `concurrent-queue` | Hard | Thread-safe priority queue with producer/consumer |
+| `api-client` | Hard | HTTP client with retry, rate limiting, circuit breaker |
 
 `coderace tasks list` now includes a `Verify` column so you can see which built-ins ship with verification suites.
 

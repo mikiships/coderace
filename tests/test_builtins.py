@@ -8,8 +8,11 @@ from coderace.builtins import get_builtin_path, list_builtins, load_builtin
 
 
 EXPECTED_BUILTINS = [
+    "api-client",
     "binary-search-tree",
+    "bug-hunt",
     "cli-args-parser",
+    "concurrent-queue",
     "csv-analyzer",
     "data-pipeline",
     "diff-algorithm",
@@ -20,6 +23,7 @@ EXPECTED_BUILTINS = [
     "json-parser",
     "lru-cache",
     "markdown-to-html",
+    "refactor",
     "regex-engine",
     "state-machine",
     "task-scheduler",
@@ -30,7 +34,7 @@ EXPECTED_BUILTINS = [
 def test_list_builtins_returns_list() -> None:
     names = list_builtins()
     assert isinstance(names, list)
-    assert len(names) >= 16
+    assert len(names) >= 20
     for expected in EXPECTED_BUILTINS:
         assert expected in names
 

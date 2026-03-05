@@ -68,3 +68,42 @@
 
 All 5 deliverables complete. 49 new tests added (574 total vs 525 baseline).
 Pre-existing intermittent failure: `test_store.py::TestEdgeCases::test_concurrent_writes` (race condition, unrelated to this feature).
+
+---
+
+# Benchmark Tasks v2 Build Progress Log
+
+**Date:** 2026-03-05
+**Contract:** all-day-build-contract-benchmark-tasks-v2.md
+
+## D1: bug-hunt task ✅
+**Built:** `bug-hunt.yaml` — debugging task with 5 planted bugs in a calculator module.
+Includes buggy source, failing tests, and hidden verification (AST-based non-rewrite check + edge cases).
+**Commit:** 86b6dac
+
+## D2: refactor task ✅
+**Built:** `refactor.yaml` — refactoring task with messy data_store.py (~150 lines).
+Hidden verification includes AST-based quality checks (type hints, function length, bare except) + functional tests.
+**Commit:** c567b59
+
+## D3: concurrent-queue task ✅
+**Built:** `concurrent-queue.yaml` — thread-safe priority queue with producer/consumer pattern.
+Hidden verification includes stress test (1000 tasks, 10 workers), priority ordering, deadlock detection.
+**Commit:** ee16720
+
+## D4: api-client task ✅
+**Built:** `api-client.yaml` — HTTP client with retry, rate limiting, circuit breaker.
+Hidden verification includes retry behavior, backoff jitter, rate limit spacing, circuit breaker state transitions.
+**Commit:** 36a1f8a
+
+## D5: Integration + Documentation ✅
+**Built:**
+- Updated `test_builtins.py` to include all 20 tasks
+- Added `test_benchmark_tasks_v2.py` with 30 new tests for the 4 new tasks
+- Updated CHANGELOG.md with v1.4.0 entry
+- Version bumped to 1.4.0 in pyproject.toml
+- Updated README.md task table (16 → 20 tasks)
+- 604 tests passing (574 baseline + 30 new)
+
+## Summary
+All 5 deliverables complete. 30 new tests added (604 total vs 574 baseline). All 20 built-in tasks load and validate correctly.
