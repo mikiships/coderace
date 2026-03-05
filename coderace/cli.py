@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 
 from coderace import __version__
-from coderace.adapters import ADAPTERS
+from coderace.adapters import ADAPTERS, instantiate_adapter, parse_agent_spec, make_display_name
 from coderace.git_ops import (
     add_worktree,
     branch_name_for,
@@ -70,7 +70,7 @@ def _run_agent_sequential(
     except Exception:
         return None, 0
 
-    adapter = ADAPTERS[agent_name]()
+    adapter = instantiate_adapter(agent_name)
     result = adapter.run(task_description, repo, timeout, no_cost=no_cost, custom_pricing=custom_pricing)
 
     _, lines = get_diff_stat(repo, base_ref)
@@ -150,7 +150,7 @@ def _run_agent_worktree(
         except FileNotFoundError:
             wall = time.monotonic() - start
             result = AgentResult(
-                agent=agent_name,
+                agent=adapter.name,
                 exit_code=127,
                 stdout="",
                 stderr=f"Command not found: {cmd[0]}",
@@ -203,7 +203,7 @@ def _run_agent_worktree(
                 cost_result = None
 
         result = AgentResult(
-            agent=agent_name,
+            agent=adapter.name,
             exit_code=exit_code,
             stdout=stdout,
             stderr=stderr,
@@ -224,7 +224,7 @@ def _run_agent_worktree(
         if status_callback:
             status_callback("coding")
 
-        adapter = ADAPTERS[agent_name]()
+        adapter = instantiate_adapter(agent_name)
         if stop_event is not None:
             result, stopped = _run_adapter_with_stop_event()
             metadata["stopped"] = stopped
@@ -344,11 +344,14 @@ def run(
     console.print(f"[dim]Agents: {', '.join(task.agents)}[/dim]")
     console.print()
 
-    # Validate agents
-    valid_agents = [a for a in task.agents if a in ADAPTERS]
-    invalid = set(task.agents) - set(valid_agents)
-    for name in invalid:
-        console.print(f"[red]Unknown agent: {name}[/red]")
+    # Validate agents (support agent:model syntax)
+    valid_agents = []
+    for spec in task.agents:
+        agent_base, _ = parse_agent_spec(spec)
+        if agent_base in ADAPTERS:
+            valid_agents.append(spec)
+        else:
+            console.print(f"[red]Unknown agent: {spec!r}[/red]")
 
     if not valid_agents:
         console.print("[red]No valid agents to run.[/red]")
@@ -386,8 +389,9 @@ def run(
                 max_workers=len(valid_agents)
             ) as executor:
                 for agent_name in valid_agents:
+                    branch_agent_key = agent_name.replace(":", "-").replace(" ", "_")
                     branch = (
-                        branch_name_for(task.name, agent_name)
+                        branch_name_for(task.name, branch_agent_key)
                         + run_suffix
                     )
                     future = executor.submit(
@@ -401,53 +405,59 @@ def run(
                         no_cost,
                         task.pricing,
                     )
-                    futures[future] = agent_name
+                    futures[future] = agent_name  # spec string
 
                 for future in as_completed(futures):
-                    agent_name = futures[future]
+                    agent_spec = futures[future]
+                    _aname, _amodel = parse_agent_spec(agent_spec)
+                    display = make_display_name(_aname, _amodel)
                     result, lines = future.result()
                     if result:
                         agent_results.append(result)
-                        diff_lines_map[agent_name] = lines
+                        diff_lines_map[result.agent] = lines
                         if result.timed_out:
                             console.print(
-                                f"  [yellow]{agent_name}: "
+                                f"  [yellow]{display}: "
                                 f"timed out after "
                                 f"{task.timeout}s[/yellow]"
                             )
                         elif result.exit_code != 0:
                             console.print(
-                                f"  [yellow]{agent_name}: "
+                                f"  [yellow]{display}: "
                                 f"exit code "
                                 f"{result.exit_code}[/yellow]"
                             )
                         else:
                             console.print(
-                                f"  [green]{agent_name}: "
+                                f"  [green]{display}: "
                                 f"completed in "
                                 f"{result.wall_time:.1f}s"
                                 f"[/green]"
                             )
                     else:
                         console.print(
-                            f"  [red]{agent_name}: "
+                            f"  [red]{display}: "
                             f"failed to run[/red]"
                         )
 
             prune_worktrees(repo)
         else:
             # Sequential mode
-            for agent_name in valid_agents:
+            for agent_spec in valid_agents:
+                _aname, _amodel = parse_agent_spec(agent_spec)
+                display = make_display_name(_aname, _amodel)
+                # Sanitize branch name (colons are invalid in git branch names)
+                branch_agent_key = agent_spec.replace(":", "-").replace(" ", "_")
                 branch = (
-                    branch_name_for(task.name, agent_name)
+                    branch_name_for(task.name, branch_agent_key)
                     + run_suffix
                 )
                 console.print(
-                    f"[cyan]Running {agent_name}...[/cyan]"
+                    f"[cyan]Running {display}...[/cyan]"
                 )
 
                 result, lines = _run_agent_sequential(
-                    agent_name,
+                    agent_spec,
                     task.description,
                     repo,
                     branch,
@@ -460,12 +470,12 @@ def run(
                 if result is None:
                     console.print(
                         f"  [red]Failed to create branch "
-                        f"for {agent_name}[/red]"
+                        f"for {display}[/red]"
                     )
                     continue
 
                 agent_results.append(result)
-                diff_lines_map[agent_name] = lines
+                diff_lines_map[result.agent] = lines
 
                 if result.timed_out:
                     console.print(
@@ -504,8 +514,9 @@ def run(
         scores: list[Score] = []
 
         for result in agent_results:
+            branch_agent_key = result.agent.replace(":", "-").replace(" ", "_").replace("(", "").replace(")", "")
             branch = (
-                branch_name_for(task.name, result.agent)
+                branch_name_for(task.name, branch_agent_key)
                 + run_suffix
             )
             checkout(repo, branch)

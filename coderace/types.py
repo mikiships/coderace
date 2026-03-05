@@ -109,7 +109,9 @@ class Task:
             errors.append("At least one agent is required")
         known = {"claude", "codex", "aider", "gemini", "opencode"}
         for agent in self.agents:
-            if agent not in known:
+            # Support agent:model syntax (e.g. "codex:gpt-5.4")
+            agent_base = agent.split(":")[0] if ":" in agent else agent
+            if agent_base not in known:
                 errors.append(f"Unknown agent: {agent!r} (known: {', '.join(sorted(known))})")
         if self.timeout < 1:
             errors.append("timeout must be positive")
