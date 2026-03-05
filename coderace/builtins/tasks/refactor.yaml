@@ -1,0 +1,589 @@
+name: refactor
+difficulty: hard
+description: |
+  Refactor a working but messy key-value store module for readability, maintainability,
+  and best practices. All existing tests must continue to pass. Do NOT change the test file.
+
+  Create a file called `data_store.py` with the following content (this is the messy
+  version you must refactor):
+
+  ```python
+  """a data store module. it works but the code is messy."""
+
+  import json
+  import os
+  import time
+
+
+  data = {}
+  _listeners = []
+  _log = []
+
+
+  def Set(k, v, ttl=None):
+      """set a value"""
+      if k is None:
+          raise Exception("key cant be none")
+      if not isinstance(k, str):
+          raise Exception("key must be string")
+      if ttl is not None:
+          if ttl <= 0:
+              raise Exception("ttl must be positive")
+          expire_at = time.time() + ttl
+      else:
+          expire_at = None
+      data[k] = {"value": v, "created": time.time(), "expire_at": expire_at}
+      _log.append({"action": "set", "key": k, "time": time.time()})
+      for fn in _listeners:
+          try:
+              fn("set", k, v)
+          except:
+              pass
+
+
+  def Get(k, default=None):
+      """get a value"""
+      if k is None:
+          raise Exception("key cant be none")
+      if not isinstance(k, str):
+          raise Exception("key must be string")
+      if k not in data:
+          _log.append({"action": "get_miss", "key": k, "time": time.time()})
+          return default
+      entry = data[k]
+      if entry["expire_at"] is not None:
+          if time.time() > entry["expire_at"]:
+              del data[k]
+              _log.append({"action": "expired", "key": k, "time": time.time()})
+              return default
+      _log.append({"action": "get_hit", "key": k, "time": time.time()})
+      return entry["value"]
+
+
+  def Delete(k):
+      """delete a key"""
+      if k is None:
+          raise Exception("key cant be none")
+      if not isinstance(k, str):
+          raise Exception("key must be string")
+      if k not in data:
+          return False
+      del data[k]
+      _log.append({"action": "delete", "key": k, "time": time.time()})
+      for fn in _listeners:
+          try:
+              fn("delete", k, None)
+          except:
+              pass
+      return True
+
+
+  def Exists(k):
+      """check if key exists"""
+      if k is None:
+          raise Exception("key cant be none")
+      if not isinstance(k, str):
+          raise Exception("key must be string")
+      if k not in data:
+          return False
+      entry = data[k]
+      if entry["expire_at"] is not None:
+          if time.time() > entry["expire_at"]:
+              del data[k]
+              return False
+      return True
+
+
+  def Keys(pattern=None):
+      """get all keys, optionally filtered"""
+      result = []
+      expired_keys = []
+      for k in data:
+          entry = data[k]
+          if entry["expire_at"] is not None:
+              if time.time() > entry["expire_at"]:
+                  expired_keys.append(k)
+                  continue
+          if pattern is not None:
+              if pattern in k:
+                  result.append(k)
+          else:
+              result.append(k)
+      for k in expired_keys:
+          del data[k]
+      return result
+
+
+  def Clear():
+      """clear all data"""
+      data.clear()
+      _log.append({"action": "clear", "time": time.time()})
+      for fn in _listeners:
+          try:
+              fn("clear", None, None)
+          except:
+              pass
+
+
+  def Count():
+      """count non-expired keys"""
+      c = 0
+      for k in list(data.keys()):
+          entry = data[k]
+          if entry["expire_at"] is not None:
+              if time.time() > entry["expire_at"]:
+                  del data[k]
+                  continue
+          c += 1
+      return c
+
+
+  def add_listener(fn):
+      """add a change listener"""
+      _listeners.append(fn)
+
+
+  def remove_listener(fn):
+      """remove a change listener"""
+      if fn in _listeners:
+          _listeners.remove(fn)
+
+
+  def get_log():
+      """get the operation log"""
+      return list(_log)
+
+
+  def clear_log():
+      """clear the log"""
+      _log.clear()
+
+
+  def save_to_file(filepath):
+      """save data to json file"""
+      save_data = {}
+      for k in data:
+          entry = data[k]
+          save_data[k] = {"value": entry["value"], "created": entry["created"], "expire_at": entry["expire_at"]}
+      with open(filepath, "w") as f:
+          json.dump(save_data, f)
+
+
+  def load_from_file(filepath):
+      """load data from json file"""
+      if not os.path.exists(filepath):
+          raise Exception("file not found: " + filepath)
+      with open(filepath, "r") as f:
+          loaded = json.load(f)
+      data.clear()
+      for k in loaded:
+          data[k] = loaded[k]
+  ```
+
+  Also create a file called `test_data_store.py` with the following tests (do NOT modify
+  this file):
+
+  ```python
+  """Tests for data_store module. These must pass before and after refactoring."""
+
+  import os
+  import time
+  import tempfile
+
+  import pytest
+
+  import data_store
+
+
+  @pytest.fixture(autouse=True)
+  def clean_state():
+      """Reset state before each test."""
+      data_store.data.clear()
+      data_store._listeners.clear()
+      data_store._log.clear()
+      yield
+      data_store.data.clear()
+      data_store._listeners.clear()
+      data_store._log.clear()
+
+
+  class TestBasicOperations:
+      def test_set_and_get(self):
+          data_store.Set("name", "Alice")
+          assert data_store.Get("name") == "Alice"
+
+      def test_get_missing_returns_default(self):
+          assert data_store.Get("missing") is None
+          assert data_store.Get("missing", "fallback") == "fallback"
+
+      def test_delete_existing(self):
+          data_store.Set("key", "val")
+          assert data_store.Delete("key") is True
+          assert data_store.Get("key") is None
+
+      def test_delete_missing(self):
+          assert data_store.Delete("nope") is False
+
+      def test_exists(self):
+          data_store.Set("key", 42)
+          assert data_store.Exists("key") is True
+          assert data_store.Exists("nope") is False
+
+      def test_keys(self):
+          data_store.Set("a", 1)
+          data_store.Set("b", 2)
+          data_store.Set("ab", 3)
+          assert sorted(data_store.Keys()) == ["a", "ab", "b"]
+
+      def test_keys_with_pattern(self):
+          data_store.Set("user_1", "Alice")
+          data_store.Set("user_2", "Bob")
+          data_store.Set("item_1", "Widget")
+          assert sorted(data_store.Keys("user")) == ["user_1", "user_2"]
+
+      def test_clear(self):
+          data_store.Set("a", 1)
+          data_store.Set("b", 2)
+          data_store.Clear()
+          assert data_store.Count() == 0
+
+      def test_count(self):
+          data_store.Set("a", 1)
+          data_store.Set("b", 2)
+          assert data_store.Count() == 2
+
+
+  class TestTTL:
+      def test_ttl_not_expired(self):
+          data_store.Set("key", "val", ttl=10)
+          assert data_store.Get("key") == "val"
+
+      def test_ttl_expired(self):
+          data_store.Set("key", "val", ttl=0.05)
+          time.sleep(0.08)
+          assert data_store.Get("key") is None
+
+      def test_ttl_expired_exists(self):
+          data_store.Set("key", "val", ttl=0.05)
+          time.sleep(0.08)
+          assert data_store.Exists("key") is False
+
+      def test_ttl_expired_count(self):
+          data_store.Set("a", 1, ttl=0.05)
+          data_store.Set("b", 2)
+          time.sleep(0.08)
+          assert data_store.Count() == 1
+
+      def test_invalid_ttl(self):
+          with pytest.raises(Exception):
+              data_store.Set("key", "val", ttl=-1)
+
+      def test_zero_ttl(self):
+          with pytest.raises(Exception):
+              data_store.Set("key", "val", ttl=0)
+
+
+  class TestValidation:
+      def test_set_none_key(self):
+          with pytest.raises(Exception):
+              data_store.Set(None, "val")
+
+      def test_set_non_string_key(self):
+          with pytest.raises(Exception):
+              data_store.Set(123, "val")
+
+      def test_get_none_key(self):
+          with pytest.raises(Exception):
+              data_store.Get(None)
+
+      def test_get_non_string_key(self):
+          with pytest.raises(Exception):
+              data_store.Get(123)
+
+      def test_delete_none_key(self):
+          with pytest.raises(Exception):
+              data_store.Delete(None)
+
+      def test_exists_none_key(self):
+          with pytest.raises(Exception):
+              data_store.Exists(None)
+
+
+  class TestListeners:
+      def test_listener_on_set(self):
+          events = []
+          data_store.add_listener(lambda a, k, v: events.append((a, k, v)))
+          data_store.Set("x", 10)
+          assert events == [("set", "x", 10)]
+
+      def test_listener_on_delete(self):
+          events = []
+          data_store.Set("x", 10)
+          data_store.add_listener(lambda a, k, v: events.append((a, k, v)))
+          data_store.Delete("x")
+          assert events == [("delete", "x", None)]
+
+      def test_listener_on_clear(self):
+          events = []
+          data_store.add_listener(lambda a, k, v: events.append((a, k, v)))
+          data_store.Clear()
+          assert events == [("clear", None, None)]
+
+      def test_remove_listener(self):
+          events = []
+          fn = lambda a, k, v: events.append((a, k, v))
+          data_store.add_listener(fn)
+          data_store.Set("a", 1)
+          data_store.remove_listener(fn)
+          data_store.Set("b", 2)
+          assert len(events) == 1
+
+      def test_listener_error_does_not_propagate(self):
+          def bad_listener(a, k, v):
+              raise RuntimeError("boom")
+          data_store.add_listener(bad_listener)
+          data_store.Set("x", 1)  # should not raise
+
+
+  class TestLog:
+      def test_set_logs(self):
+          data_store.Set("k", "v")
+          log = data_store.get_log()
+          assert len(log) == 1
+          assert log[0]["action"] == "set"
+          assert log[0]["key"] == "k"
+
+      def test_get_hit_logs(self):
+          data_store.Set("k", "v")
+          data_store.Get("k")
+          log = data_store.get_log()
+          assert log[-1]["action"] == "get_hit"
+
+      def test_get_miss_logs(self):
+          data_store.Get("missing")
+          log = data_store.get_log()
+          assert log[-1]["action"] == "get_miss"
+
+      def test_clear_log(self):
+          data_store.Set("k", "v")
+          data_store.clear_log()
+          assert data_store.get_log() == []
+
+
+  class TestPersistence:
+      def test_save_and_load(self):
+          data_store.Set("name", "Alice")
+          data_store.Set("age", 30)
+          with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+              path = f.name
+          try:
+              data_store.save_to_file(path)
+              data_store.Clear()
+              data_store.load_from_file(path)
+              assert data_store.Get("name") == "Alice"
+              assert data_store.Get("age") == 30
+          finally:
+              os.unlink(path)
+
+      def test_load_missing_file(self):
+          with pytest.raises(Exception):
+              data_store.load_from_file("/nonexistent/path.json")
+
+      def test_various_value_types(self):
+          data_store.Set("str", "hello")
+          data_store.Set("int", 42)
+          data_store.Set("float", 3.14)
+          data_store.Set("list", [1, 2, 3])
+          data_store.Set("dict", {"a": 1})
+          data_store.Set("bool", True)
+          data_store.Set("none", None)
+          assert data_store.Get("str") == "hello"
+          assert data_store.Get("int") == 42
+          assert data_store.Get("float") == 3.14
+          assert data_store.Get("list") == [1, 2, 3]
+          assert data_store.Get("dict") == {"a": 1}
+          assert data_store.Get("bool") is True
+          assert data_store.Get("none") is None
+  ```
+
+  Refactor `data_store.py` for:
+  1. Readability and consistent naming conventions
+  2. Type hints on all public functions
+  3. No function exceeding 25 lines
+  4. No duplicated logic (e.g., key validation appears in every function)
+  5. Proper error handling (specific exceptions, not bare `except`)
+
+  All tests in `test_data_store.py` must still pass after refactoring. The module must
+  still export the same public API (Set, Get, Delete, Exists, Keys, Clear, Count,
+  add_listener, remove_listener, get_log, clear_log, save_to_file, load_from_file,
+  data, _listeners, _log).
+
+  Do NOT modify `test_data_store.py`. Do NOT modify any other files.
+repo: .
+test_command: python3 -m pytest test_data_store.py -x -q
+verify_command: python3 -m pytest verify_refactor.py -x -q
+verify_files:
+  verify_refactor.py: |
+    """Hidden verification tests for refactor task — quality checks + functional."""
+
+    import ast
+    import inspect
+    import os
+    import tempfile
+    import time
+
+    import pytest
+
+    import data_store
+
+
+    @pytest.fixture(autouse=True)
+    def clean_state():
+        data_store.data.clear()
+        data_store._listeners.clear()
+        data_store._log.clear()
+        yield
+        data_store.data.clear()
+        data_store._listeners.clear()
+        data_store._log.clear()
+
+
+    # --- AST-based quality checks ---
+
+    def _get_module_ast():
+        source = inspect.getsource(data_store)
+        return ast.parse(source)
+
+
+    def test_type_hints_on_public_functions():
+        """All public functions must have type annotations on parameters."""
+        tree = _get_module_ast()
+        public_funcs = [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")
+        ]
+        assert len(public_funcs) >= 10, "Expected at least 10 public functions"
+        for func in public_funcs:
+            # Check that at least return annotation exists
+            has_return = func.returns is not None
+            # Check parameters have annotations (skip 'self')
+            params = func.args.args
+            annotated = sum(
+                1 for arg in params
+                if arg.annotation is not None and arg.arg != "self"
+            )
+            total = len([a for a in params if a.arg != "self"])
+            if total > 0:
+                assert annotated > 0, (
+                    f"Function {func.name} has {total} params but no type hints"
+                )
+
+
+    def test_no_function_exceeds_25_lines():
+        """No function body should exceed 25 lines."""
+        tree = _get_module_ast()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                body_lines = node.end_lineno - node.lineno
+                assert body_lines <= 25, (
+                    f"Function {node.name} is {body_lines} lines "
+                    f"(max 25)"
+                )
+
+
+    def test_no_bare_except():
+        """No bare except clauses allowed."""
+        source = inspect.getsource(data_store)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ExceptHandler):
+                # bare except has type=None
+                assert node.type is not None, "Bare except found — use specific exceptions"
+
+
+    # --- Public API preservation ---
+
+    def test_public_api_preserved():
+        """The module must still export the same public API."""
+        required = [
+            "Set", "Get", "Delete", "Exists", "Keys", "Clear", "Count",
+            "add_listener", "remove_listener", "get_log", "clear_log",
+            "save_to_file", "load_from_file", "data", "_listeners", "_log",
+        ]
+        for name in required:
+            assert hasattr(data_store, name), f"Missing public API: {name}"
+
+
+    # --- Functional tests beyond the original suite ---
+
+    def test_overwrite_value():
+        data_store.Set("k", 1)
+        data_store.Set("k", 2)
+        assert data_store.Get("k") == 2
+
+    def test_delete_then_set():
+        data_store.Set("k", 1)
+        data_store.Delete("k")
+        data_store.Set("k", 2)
+        assert data_store.Get("k") == 2
+
+    def test_keys_excludes_expired():
+        data_store.Set("alive", 1, ttl=10)
+        data_store.Set("dead", 2, ttl=0.05)
+        time.sleep(0.08)
+        keys = data_store.Keys()
+        assert "alive" in keys
+        assert "dead" not in keys
+
+    def test_count_after_mixed_operations():
+        data_store.Set("a", 1)
+        data_store.Set("b", 2)
+        data_store.Set("c", 3)
+        data_store.Delete("b")
+        assert data_store.Count() == 2
+
+    def test_save_load_preserves_ttl_structure():
+        data_store.Set("k", "v", ttl=3600)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            data_store.save_to_file(path)
+            data_store.Clear()
+            data_store.load_from_file(path)
+            entry = data_store.data["k"]
+            assert "value" in entry
+            assert "expire_at" in entry
+            assert entry["value"] == "v"
+        finally:
+            os.unlink(path)
+
+    def test_multiple_listeners():
+        events1 = []
+        events2 = []
+        data_store.add_listener(lambda a, k, v: events1.append(a))
+        data_store.add_listener(lambda a, k, v: events2.append(a))
+        data_store.Set("x", 1)
+        assert events1 == ["set"]
+        assert events2 == ["set"]
+
+    def test_log_records_timestamps():
+        before = time.time()
+        data_store.Set("k", "v")
+        after = time.time()
+        log = data_store.get_log()
+        assert before <= log[0]["time"] <= after
+lint_command: ruff check data_store.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5
