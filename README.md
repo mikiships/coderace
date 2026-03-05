@@ -315,6 +315,41 @@ Keys can be agent names (`claude`, `codex`, `aider`, `gemini`, `opencode`) or mo
 
 Pricing is easy to update: the table lives in `coderace/cost.py` as a plain dict.
 
+## Model Selection
+
+Compare different models of the same agent head-to-head using the `agent:model` syntax:
+
+```bash
+# Compare two Codex models on the same task
+coderace run task.yaml --agent codex:gpt-5.4 --agent codex:gpt-5.3-codex
+
+# Mix agents and models
+coderace run task.yaml --agent codex:gpt-5.4 --agent claude:opus-4-6 --agent claude:sonnet-4-6
+
+# Benchmark multiple model variants across built-in tasks
+coderace benchmark --agents codex:gpt-5.4,codex:gpt-5.3-codex,claude:opus-4-6
+
+# Race with model variants (parallel)
+coderace race task.yaml
+```
+
+In task YAML files:
+
+```yaml
+agents:
+  - codex:gpt-5.4
+  - codex:gpt-5.3-codex
+  - claude:opus-4-6
+  - claude:sonnet-4-6
+```
+
+**How it works:**
+- `agent:model` splits on the first colon: `codex:gpt-5.4` → agent `codex`, model `gpt-5.4`
+- The model is passed via `--model <name>` to the underlying CLI
+- Results display as `codex (gpt-5.4)` vs `codex (gpt-5.3-codex)` for easy comparison
+- ELO ratings, leaderboard, and dashboard track each model variant separately
+- The same agent can appear multiple times with different models in one run
+
 ## Leaderboard & History
 
 Every `coderace run` automatically saves results to a local SQLite database (`~/.coderace/results.db`). Two new commands aggregate this data.

@@ -33,13 +33,14 @@ def test_example_yaml_has_required_fields(example_path: Path) -> None:
 
 @pytest.mark.parametrize("example_path", EXAMPLE_FILES, ids=lambda p: p.name)
 def test_example_yaml_agents_are_known(example_path: Path) -> None:
-    """Each example file must only list known agents."""
+    """Each example file must only list known agents (supports agent:model syntax)."""
     content = example_path.read_text()
     data = yaml.safe_load(content)
     known = {"claude", "codex", "aider", "gemini", "opencode"}
     agents = data.get("agents", [])
     assert agents, f"{example_path.name} must list at least one agent"
-    unknown = set(agents) - known
+    # Strip optional :model suffix before checking
+    unknown = {a for a in agents if a.split(":")[0] not in known}
     assert not unknown, f"{example_path.name} has unknown agents: {unknown}"
 
 

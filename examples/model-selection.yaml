@@ -1,0 +1,30 @@
+# Model Selection Example
+# Compare different models of the same agent on the same task.
+# Run with: coderace run examples/model-selection.yaml
+
+name: model-comparison
+description: |
+  Add a `reverse_words(sentence: str) -> str` function to utils.py
+  that reverses the word order in a sentence.
+  Example: reverse_words("hello world") -> "world hello"
+
+repo: .  # Replace with your actual repo path
+test_command: pytest tests/ -x -q
+lint_command: ruff check . --select E,F --quiet
+
+timeout: 300
+
+# Compare models head-to-head — same task, different models
+agents:
+  - codex:gpt-5.4
+  - codex:gpt-5.3-codex
+  - claude:opus-4-6
+  - claude:sonnet-4-6
+
+# Custom scoring: emphasize correctness over speed for model comparison
+scoring:
+  tests_pass: 0.50
+  exit_clean: 0.25
+  lint_clean: 0.15
+  wall_time: 0.05
+  lines_changed: 0.05

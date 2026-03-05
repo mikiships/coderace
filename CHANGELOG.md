@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0] - 2026-03-05
+
+### Added
+- **Model selection**: Per-agent model override via `agent:model` syntax in `--agents` / `--agent` flags
+  - Example: `coderace run task.yaml --agent codex:gpt-5.4 --agent codex:gpt-5.3-codex`
+  - Example: `coderace benchmark --agents claude:opus-4-6,claude:sonnet-4-6`
+- `BaseAdapter.__init__(model=None)`: all adapters accept optional model at construction
+- `BaseAdapter.build_command(task, model=None)`: model parameter flows to CLI flag
+- `parse_agent_spec()`, `make_display_name()`, `instantiate_adapter()` in `coderace.adapters`
+- All adapters (codex, claude, aider, gemini, opencode) append `--model <name>` when specified
+- Benchmark and race commands handle model-specific agents; display names flow to results, store, ELO, dashboard
+- Task YAML: `agents` list accepts `agent:model` entries (e.g. `- codex:gpt-5.4`)
+
+### Changed
+- `AgentResult.agent` is now the display name (`codex (gpt-5.4)`) when a model is specified
+- ELO ratings, leaderboard, and dashboard automatically track model variants as separate entries
+- Branch names sanitized to be git-compatible (colons replaced with dashes)
+
 ## [1.2.0] - 2026-03-03
 
 ### Added
