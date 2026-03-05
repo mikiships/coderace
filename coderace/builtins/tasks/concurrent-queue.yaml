@@ -1,0 +1,328 @@
+name: concurrent-queue
+difficulty: hard
+description: |
+  Build a thread-safe priority queue with a producer/consumer pattern.
+
+  Create a file called `concurrent_queue.py` with the following class:
+
+  ```python
+  class PriorityTaskQueue:
+      def __init__(self, max_size: int = 0):
+          """Initialize the queue. max_size=0 means unlimited."""
+
+      def submit(self, task: callable, priority: int = 0) -> str:
+          """Submit a task (callable) with a priority (higher = processed first).
+          Returns a unique task ID string.
+          Raises Full if queue is at max_size and max_size > 0."""
+
+      def cancel(self, task_id: str) -> bool:
+          """Cancel a queued task by ID. Returns True if cancelled, False if
+          already running or completed."""
+
+      def worker(self, callback: callable) -> threading.Thread:
+          """Start a daemon worker thread that processes tasks by priority.
+          callback(task_id, result) is called when a task completes.
+          callback(task_id, exception) is called when a task fails.
+          Returns the thread."""
+
+      def shutdown(self, wait: bool = True) -> None:
+          """Signal all workers to stop. If wait=True, block until all
+          pending tasks are processed and workers exit."""
+
+      @property
+      def tasks_submitted(self) -> int:
+          """Total tasks submitted (thread-safe)."""
+
+      @property
+      def tasks_completed(self) -> int:
+          """Total tasks completed successfully (thread-safe)."""
+
+      @property
+      def tasks_failed(self) -> int:
+          """Total tasks that raised exceptions (thread-safe)."""
+  ```
+
+  Requirements:
+  - Thread-safe: multiple producers and consumers must work concurrently
+  - Priority ordering: higher priority tasks are processed first
+  - `submit()` raises `queue.Full` when `max_size > 0` and queue is full
+  - `cancel()` returns True only if the task hasn't started running yet
+  - `worker()` starts a daemon thread; multiple workers can run in parallel
+  - `shutdown(wait=True)` processes all remaining tasks before returning
+  - `shutdown(wait=False)` signals stop but returns immediately
+  - Stats (`tasks_submitted`, `tasks_completed`, `tasks_failed`) are thread-safe
+  - Task IDs must be unique strings (e.g., UUID)
+
+  Also create `test_concurrent_queue.py` with tests for:
+  - Basic submit and process
+  - Priority ordering (higher priority processed first)
+  - Multiple workers processing tasks concurrently
+  - Graceful shutdown (pending tasks complete)
+  - Task cancellation
+  - Backpressure when queue is full (raises queue.Full)
+  - Thread safety under concurrent access
+  - Stats accuracy
+
+  Do NOT modify any files other than `concurrent_queue.py` and `test_concurrent_queue.py`.
+repo: .
+test_command: python3 -m pytest test_concurrent_queue.py -x -q
+verify_command: python3 -m pytest verify_concurrent_queue.py -x -q
+verify_files:
+  verify_concurrent_queue.py: |
+    """Hidden verification tests for concurrent-queue task."""
+
+    import queue
+    import threading
+    import time
+
+    import pytest
+
+    from concurrent_queue import PriorityTaskQueue
+
+
+    class TestBasicFunctionality:
+        def test_submit_and_process(self):
+            pq = PriorityTaskQueue()
+            results = []
+
+            def callback(task_id, result):
+                results.append(result)
+
+            pq.worker(callback)
+            pq.submit(lambda: 42, priority=1)
+            time.sleep(0.2)
+            pq.shutdown(wait=True)
+            assert 42 in results
+
+        def test_submit_returns_unique_ids(self):
+            pq = PriorityTaskQueue()
+            ids = set()
+            for _ in range(100):
+                tid = pq.submit(lambda: None, priority=0)
+                assert isinstance(tid, str)
+                ids.add(tid)
+            pq.shutdown(wait=False)
+            assert len(ids) == 100
+
+
+    class TestPriorityOrdering:
+        def test_higher_priority_processed_first(self):
+            pq = PriorityTaskQueue()
+            order = []
+            event = threading.Event()
+
+            def make_task(label):
+                def task():
+                    event.wait()
+                    order.append(label)
+                return task
+
+            # Submit tasks before starting worker, so priority matters
+            pq.submit(make_task("low"), priority=1)
+            pq.submit(make_task("med"), priority=5)
+            pq.submit(make_task("high"), priority=10)
+
+            def callback(tid, result):
+                pass
+
+            event.set()
+            pq.worker(callback)
+            time.sleep(0.5)
+            pq.shutdown(wait=True)
+            # High priority should be processed first
+            assert order[0] == "high"
+
+        def test_equal_priority_all_processed(self):
+            pq = PriorityTaskQueue()
+            results = []
+
+            def callback(tid, result):
+                results.append(result)
+
+            pq.worker(callback)
+            for i in range(10):
+                pq.submit(lambda i=i: i, priority=0)
+            time.sleep(0.5)
+            pq.shutdown(wait=True)
+            assert sorted(results) == list(range(10))
+
+
+    class TestMultipleWorkers:
+        def test_multiple_workers_process_concurrently(self):
+            pq = PriorityTaskQueue()
+            active = {"count": 0, "max": 0}
+            lock = threading.Lock()
+
+            def task():
+                with lock:
+                    active["count"] += 1
+                    active["max"] = max(active["max"], active["count"])
+                time.sleep(0.05)
+                with lock:
+                    active["count"] -= 1
+                return True
+
+            results = []
+            def callback(tid, result):
+                results.append(result)
+
+            for _ in range(4):
+                pq.worker(callback)
+
+            for _ in range(20):
+                pq.submit(task, priority=0)
+
+            pq.shutdown(wait=True)
+            assert len(results) == 20
+            assert active["max"] > 1  # Proves concurrency
+
+
+    class TestShutdown:
+        def test_shutdown_wait_completes_pending(self):
+            pq = PriorityTaskQueue()
+            completed = []
+
+            def callback(tid, result):
+                completed.append(result)
+
+            pq.worker(callback)
+            for i in range(10):
+                pq.submit(lambda i=i: i, priority=0)
+
+            pq.shutdown(wait=True)
+            assert len(completed) == 10
+
+        def test_shutdown_no_wait_returns_immediately(self):
+            pq = PriorityTaskQueue()
+            def callback(tid, result):
+                pass
+
+            pq.worker(callback)
+            for _ in range(5):
+                pq.submit(lambda: time.sleep(0.5), priority=0)
+
+            start = time.time()
+            pq.shutdown(wait=False)
+            elapsed = time.time() - start
+            assert elapsed < 1.0  # Should return quickly
+
+
+    class TestCancellation:
+        def test_cancel_queued_task(self):
+            pq = PriorityTaskQueue()
+            # Don't start any workers so task stays queued
+            tid = pq.submit(lambda: 42, priority=0)
+            assert pq.cancel(tid) is True
+            pq.shutdown(wait=False)
+
+        def test_cancel_nonexistent_task(self):
+            pq = PriorityTaskQueue()
+            result = pq.cancel("nonexistent-id")
+            assert result is False
+            pq.shutdown(wait=False)
+
+        def test_cancelled_task_not_processed(self):
+            pq = PriorityTaskQueue()
+            results = []
+
+            def callback(tid, result):
+                results.append(result)
+
+            tid1 = pq.submit(lambda: "kept", priority=1)
+            tid2 = pq.submit(lambda: "cancelled", priority=2)
+            pq.cancel(tid2)
+
+            pq.worker(callback)
+            time.sleep(0.3)
+            pq.shutdown(wait=True)
+            assert "cancelled" not in results
+
+
+    class TestBackpressure:
+        def test_full_queue_raises(self):
+            pq = PriorityTaskQueue(max_size=2)
+            pq.submit(lambda: None, priority=0)
+            pq.submit(lambda: None, priority=0)
+            with pytest.raises(queue.Full):
+                pq.submit(lambda: None, priority=0)
+            pq.shutdown(wait=False)
+
+        def test_unlimited_queue_never_raises(self):
+            pq = PriorityTaskQueue(max_size=0)
+            for _ in range(100):
+                pq.submit(lambda: None, priority=0)
+            pq.shutdown(wait=False)
+
+
+    class TestStats:
+        def test_stats_accurate(self):
+            pq = PriorityTaskQueue()
+            results = []
+
+            def callback(tid, result):
+                results.append(result)
+
+            pq.worker(callback)
+
+            pq.submit(lambda: 1, priority=0)
+            pq.submit(lambda: 2, priority=0)
+            pq.submit(lambda: (_ for _ in ()).throw(ValueError("boom")), priority=0)
+
+            time.sleep(0.5)
+            pq.shutdown(wait=True)
+
+            assert pq.tasks_submitted == 3
+            assert pq.tasks_completed + pq.tasks_failed == 3
+
+
+    class TestStressAndDeadlock:
+        def test_stress_1000_tasks_10_workers(self):
+            pq = PriorityTaskQueue()
+            results = []
+            lock = threading.Lock()
+
+            def callback(tid, result):
+                with lock:
+                    results.append(result)
+
+            for _ in range(10):
+                pq.worker(callback)
+
+            for i in range(1000):
+                pq.submit(lambda i=i: i, priority=i % 10)
+
+            pq.shutdown(wait=True)
+            assert len(results) == 1000
+
+        def test_completes_within_timeout(self):
+            """Deadlock detection: this test must complete in <10 seconds."""
+            pq = PriorityTaskQueue()
+            done = threading.Event()
+
+            def callback(tid, result):
+                pass
+
+            for _ in range(4):
+                pq.worker(callback)
+
+            for i in range(200):
+                pq.submit(lambda: None, priority=i % 5)
+
+            pq.shutdown(wait=True)
+            done.set()
+            assert done.is_set()
+lint_command: ruff check concurrent_queue.py
+timeout: 600
+agents:
+  - claude
+  - codex
+  - gemini
+  - aider
+  - opencode
+scoring:
+  tests: 25
+  verify: 30
+  exit: 20
+  lint: 15
+  time: 5
+  lines: 5
