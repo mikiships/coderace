@@ -97,7 +97,7 @@ def run_benchmark(
     import tempfile
     from pathlib import Path
 
-    from coderace.adapters import ADAPTERS
+    from coderace.adapters import ADAPTERS, make_display_name, parse_agent_spec
     from coderace.builtins import get_builtin_path
     from coderace.git_ops import (
         branch_name_for,
@@ -112,9 +112,14 @@ def run_benchmark(
     benchmark_id = _make_benchmark_id()
     if trials < 1:
         raise ValueError("trials must be >= 1")
+    # Normalize agent specs to display names so result.agents matches
+    # TaskAgentResult.agent (which uses adapter display names).
+    display_agents = [
+        make_display_name(*parse_agent_spec(a)) for a in agents
+    ]
     result = BenchmarkResult(
         benchmark_id=benchmark_id,
-        agents=list(agents),
+        agents=display_agents,
         tasks=list(tasks),
         trials=trials,
     )
