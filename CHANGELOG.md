@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.0] - 2026-03-10
+
+### Added
+- **`coderace context-eval`**: A/B test whether a context file (CLAUDE.md, AGENTS.md, .cursorrules, etc.) actually improves agent performance
+  - Runs N trials per condition: baseline (no context file) vs treatment (with context file)
+  - Produces statistical comparison with 95% confidence intervals, Cohen's d effect size, and per-task breakdown
+  - Summary verdict: "Context file improved performance by X% (CI: [lo, hi])" or "No significant improvement detected"
+  - Output formats: Rich terminal table (default) and JSON (`--output`)
+  - Backup/restore logic for pre-existing context files in the task directory
+- **Dashboard integration**: `coderace dashboard --context-eval <json>` embeds A/B comparison section with bar charts and delta table
+- **`examples/context-eval-demo.sh`**: end-to-end demo script (create context file → run A/B eval → generate dashboard)
+- Reuses existing agent execution, task loading, and statistical infrastructure for consistency
+
 ## [1.6.0] - 2026-03-10
 
 ### Added
