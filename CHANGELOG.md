@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0] - 2026-03-10
+
+### Added
+- **GitHub Action `mode: review`**: First-class PR review support in the GitHub Action — auto-extracts the PR diff and runs `coderace review` on it, posting results as a PR comment
+- New action inputs: `mode`, `diff-source`, `lanes`, `cross-reviewers`, `json-out`, `md-out`
+- New action outputs: `review-json`, `review-md`
+- **`scripts/ci-review.sh`**: CI script handling diff extraction for `pr`, `commit:<sha>`, `branch:<base>...<head>`, and `file:<path>` sources; emits `GITHUB_OUTPUT` compatible outputs
+- **`scripts/format-review-comment.py`**: Formats review JSON as a GitHub PR comment with per-lane findings, cross-review synthesis section, severity breakdown, and collapsible raw JSON
+- **`.github/workflows/examples/coderace-pr-review.yml`**: Copy-pasteable example workflow for enabling PR review in any repo
+- PR comment includes `<!-- coderace-review -->` marker for find-and-update across PR syncs
+- Backward compatible: existing `mode: run` (or no `mode` input) continues to work exactly as v1.5.0
+
 ## [1.5.0] - 2026-03-10
 
 ### Added

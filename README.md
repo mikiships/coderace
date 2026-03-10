@@ -575,6 +575,66 @@ The goal isn't "which model is best." It's "which agent solves my specific probl
 
 Use coderace in GitHub Actions to automatically race agents on PRs and post results as comments.
 
+### Automated PR Review
+
+In addition to racing agents on tasks, coderace v1.6.0 adds **multi-lane PR review** via GitHub Actions.
+
+Instead of a single AI reviewer, coderace races multiple agents reviewing in parallel lanes (security, logic, style, tests), then runs a cross-review pass where agents check each other's findings. Results post as a PR comment showing which reviewer found which issues.
+
+**Minimal setup:**
+
+```yaml
+# .github/workflows/coderace-review.yml
+name: coderace PR Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for git diff against base branch
+      - name: Run coderace review
+        uses: mikiships/coderace@v1.6.0
+        with:
+          mode: review
+          diff-source: pr
+          agents: claude,codex
+          cross-reviewers: 2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+A full example with comments and artifact upload is at `.github/workflows/examples/coderace-pr-review.yml`.
+
+**What the PR comment looks like:**
+
+| Section | Contents |
+|---------|----------|
+| Header | Agent count, lane count, elapsed time |
+| Summary | Total findings, severity breakdown, top critical/error issues |
+| Phase 1: Lane Findings | Per-lane findings with agent attribution and severity |
+| Phase 2: Cross-Review | Issues confirmed or added by cross-reviewing agents |
+| Raw JSON | Collapsible full JSON for downstream tooling |
+
+**`mode: review` inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `diff-source` | `pr` | `pr`, `commit:<sha>`, `branch:<base>...<head>`, `file:<path>` |
+| `agents` | coderace defaults | Comma-separated agents to use |
+| `lanes` | coderace defaults | Comma-separated lane names (security, logic, style, tests) |
+| `cross-reviewers` | `2` | Number of cross-review agents (0 to skip Phase 2) |
+| `json-out` | — | Path to save review JSON output |
+| `md-out` | — | Path to save review markdown output |
+
 ### Quick setup
 
 1. Copy `examples/ci-race-on-pr.yml` into `.github/workflows/` in your repo.
