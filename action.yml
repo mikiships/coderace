@@ -7,17 +7,42 @@ branding:
   color: 'orange'
 
 inputs:
+  mode:
+    description: 'Operation mode: "run" (default, race agents on a task) or "review" (multi-lane PR review)'
+    required: false
+    default: 'run'
   task:
-    description: 'Path to the coderace task YAML file'
-    required: true
+    description: 'Path to the coderace task YAML file (required for mode: run)'
+    required: false
+    default: ''
   agents:
-    description: 'Comma-separated list of agents to race (overrides task file)'
+    description: 'Comma-separated list of agents to race (overrides task file). Applies to both modes.'
     required: false
     default: ''
   parallel:
-    description: 'Run agents in parallel (true/false)'
+    description: 'Run agents in parallel (true/false). Applies to mode: run.'
     required: false
     default: 'false'
+  diff-source:
+    description: 'Diff source for mode: review. Options: "pr" (auto from PR context), "commit:<sha>", "branch:<base>...<head>", "file:<path>"'
+    required: false
+    default: 'pr'
+  lanes:
+    description: 'Comma-separated review lane names for mode: review (optional, uses coderace defaults)'
+    required: false
+    default: ''
+  cross-reviewers:
+    description: 'Number of cross-review agents for mode: review (optional, default: 2)'
+    required: false
+    default: '2'
+  json-out:
+    description: 'Path for review JSON output (mode: review, optional)'
+    required: false
+    default: ''
+  md-out:
+    description: 'Path for review markdown output (mode: review, optional)'
+    required: false
+    default: ''
   github-token:
     description: 'GitHub token for posting PR comments (uses GITHUB_TOKEN if not set)'
     required: false
@@ -33,8 +58,14 @@ inputs:
 
 outputs:
   results-json:
-    description: 'Path to the JSON results file'
+    description: 'Path to the JSON results file (mode: run)'
     value: ${{ steps.run.outputs.results-json }}
+  review-json:
+    description: 'Path to the review JSON output file (mode: review)'
+    value: ${{ steps.review.outputs.review-json }}
+  review-md:
+    description: 'Path to the review markdown output file (mode: review)'
+    value: ${{ steps.review.outputs.review-md }}
   comment-id:
     description: 'ID of the PR comment created or updated'
     value: ${{ steps.comment.outputs.comment-id }}
@@ -56,8 +87,12 @@ runs:
           pip install "coderace==${{ inputs.coderace-version }}" --quiet
         fi
 
-    - name: Run coderace
+    # -----------------------------------------------------------------------
+    # mode: run — existing task-race behavior (unchanged)
+    # -----------------------------------------------------------------------
+    - name: Run coderace (task mode)
       id: run
+      if: inputs.mode == 'run'
       shell: bash
       env:
         CODERACE_TASK: ${{ inputs.task }}
@@ -65,9 +100,9 @@ runs:
         CODERACE_PARALLEL: ${{ inputs.parallel }}
       run: ${{ github.action_path }}/scripts/ci-run.sh
 
-    - name: Format PR comment
+    - name: Format PR comment (task mode)
       id: format
-      if: always()
+      if: inputs.mode == 'run' && always()
       shell: bash
       run: |
         python "${{ github.action_path }}/scripts/format-comment.py" \
@@ -75,6 +110,41 @@ runs:
           --task-name "${{ inputs.task }}" \
           --output /tmp/coderace-comment.md || echo "No results to format."
 
+    # -----------------------------------------------------------------------
+    # mode: review — multi-lane PR review (new in v1.6.0)
+    # -----------------------------------------------------------------------
+    - name: Run coderace review
+      id: review
+      if: inputs.mode == 'review'
+      shell: bash
+      env:
+        CODERACE_DIFF_SOURCE: ${{ inputs.diff-source }}
+        CODERACE_AGENTS: ${{ inputs.agents }}
+        CODERACE_LANES: ${{ inputs.lanes }}
+        CODERACE_CROSS_REVIEWERS: ${{ inputs.cross-reviewers }}
+        CODERACE_JSON_OUT: ${{ inputs.json-out }}
+        CODERACE_MD_OUT: ${{ inputs.md-out }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+      run: ${{ github.action_path }}/scripts/ci-review.sh
+
+    - name: Format review PR comment
+      id: format-review
+      if: inputs.mode == 'review' && always()
+      shell: bash
+      run: |
+        REVIEW_JSON="${{ steps.review.outputs.review-json }}"
+        if [ -n "${REVIEW_JSON}" ] && [ -f "${REVIEW_JSON}" ]; then
+          python "${{ github.action_path }}/scripts/format-review-comment.py" \
+            --json-file "${REVIEW_JSON}" \
+            --output /tmp/coderace-review-comment.md
+        else
+          echo "<!-- coderace-review -->" > /tmp/coderace-review-comment.md
+          echo "**coderace review**: no results." >> /tmp/coderace-review-comment.md
+        fi
+
+    # -----------------------------------------------------------------------
+    # Post or update PR comment (both modes)
+    # -----------------------------------------------------------------------
     - name: Post or update PR comment
       id: comment
       if: always() && github.event_name == 'pull_request'
@@ -82,8 +152,16 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
-        COMMENT_BODY=$(cat /tmp/coderace-comment.md 2>/dev/null || echo "coderace: no results.")
-        MARKER="<!-- coderace-results -->"
+        MODE="${{ inputs.mode }}"
+        if [ "${MODE}" = "review" ]; then
+          COMMENT_FILE="/tmp/coderace-review-comment.md"
+          MARKER="<!-- coderace-review -->"
+        else
+          COMMENT_FILE="/tmp/coderace-comment.md"
+          MARKER="<!-- coderace-results -->"
+        fi
+
+        COMMENT_BODY=$(cat "${COMMENT_FILE}" 2>/dev/null || echo "${MARKER} coderace: no results.")
         FULL_BODY="${MARKER}
         ${COMMENT_BODY}"
 
@@ -96,9 +174,10 @@ runs:
           "${API}/issues/${PR_NUMBER}/comments" | \
           python3 -c "
         import json, sys
+        marker = '''${MARKER}'''
         comments = json.load(sys.stdin)
         for c in comments:
-            if '<!-- coderace-results -->' in c.get('body', ''):
+            if marker in c.get('body', ''):
                 print(c['id'])
                 break
         ")
