@@ -1,0 +1,28 @@
+diff --git a/api/handlers.py b/api/handlers.py
+index 1111111..2222222 100644
+--- a/api/handlers.py
++++ b/api/handlers.py
+@@ -10,7 +10,10 @@ def handle(request):
+-    user = get_user(request.user_id)
+-    return {"email": user.email}
++    user = get_user(request.user_id)
++    email = user.email
++    user_id = int(request.data["id"])
++    return {"email": email, "user_id": user_id}
+diff --git a/auth/validators.py b/auth/validators.py
+index 3333333..4444444 100644
+--- a/auth/validators.py
++++ b/auth/validators.py
+@@ -40,6 +40,8 @@ def validate_user(user):
+-    if user.is_admin:
++    if user.is_admin:
+         return True
++    return user.profile.name.startswith("A")
+diff --git a/cache/client.py b/cache/client.py
+index 5555555..6666666 100644
+--- a/cache/client.py
++++ b/cache/client.py
+@@ -5,5 +5,6 @@ def read_cached_value(cache, key):
+-    return cache.get(key)
++    value = cache.get(key)
++    return value.strip()

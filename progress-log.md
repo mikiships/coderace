@@ -107,3 +107,76 @@ Hidden verification includes retry behavior, backoff jitter, rate limit spacing,
 
 ## Summary
 All 5 deliverables complete. 30 new tests added (604 total vs 574 baseline). All 20 built-in tasks load and validate correctly.
+
+---
+
+# Review Mode Build Progress Log
+
+**Date:** 2026-03-10
+**Contract:** all-day-build-contract-review-mode.md
+
+## D1: Core review engine ✅
+
+**Built:**
+- Added `LaneFinding` and `ReviewResult` dataclasses in `coderace/types.py`
+- Added `coderace/review.py` with built-in lane definitions, deterministic lane prompts, structured finding parsing, and parallel Phase 1 / optional Phase 2 execution
+- Added D1-focused review tests covering lane prompt generation, JSON/text finding parsing, round-robin agent assignment, cross-review, and agent failure fallback
+
+**Tests:** 12 review tests passing in `tests/test_review.py`
+**Blockers:** Sandbox denies writes inside `.git`, so required per-deliverable commits cannot be created from this session (`.git/index.lock: Operation not permitted`).
+
+## D2: Review CLI command ✅
+
+**Built:**
+- Added `coderace/commands/review.py` with `coderace review`
+- Implemented diff source precedence: `--diff`, `--commit`, `--branch`, then stdin
+- Added `--lanes`, `--agents`, `--cross-review`, `--output`, `--format`, and `--no-color`
+- Registered `review` in `coderace/cli.py`
+- Added CLI tests for stdin, file input, commit diff, branch diff, JSON output, file output, and unknown-agent rejection
+
+**Tests:** 21 review tests passing in `tests/test_review.py`; `tests/test_cli.py` (5) and `tests/test_diff.py` (22) still passing
+**Blockers:** Sandbox still blocks required git commits from this session.
+
+## D3: Review report renderer ✅
+
+**Built:**
+- Added `coderace/review_report.py`
+- Implemented `render_review_markdown(result)` with lane sections, severity grouping, conditional Phase 2 synthesis, and summary table
+- Implemented `render_review_json(result)` with schema-backed JSON serialization
+- Updated `coderace review` to use the dedicated renderer module
+- Added snapshot-style renderer tests for markdown and JSON output
+
+**Tests:** 25 review tests passing in `tests/test_review.py`; `tests/test_cli.py` (5) and `tests/test_diff.py` (22) still passing
+**Blockers:** Sandbox still blocks required git commits from this session.
+
+## D4: Integration test coverage ✅
+
+**Built:**
+- Added `tests/fixtures/sample.patch` with a realistic 3-file diff
+- Added end-to-end review pipeline tests with mocked adapters exercising the real engine
+- Added markdown and JSON integration assertions against the rendered report
+- Added CLI integration coverage for `coderace review --diff tests/fixtures/sample.patch`
+- Review-mode test suite now exceeds the contract minimum with 29 new tests
+
+**Tests:** `tests/test_review.py` (29), `tests/test_cli.py` (5), and `tests/test_diff.py` (22) passing
+**Blockers:** Sandbox still blocks required git commits from this session.
+
+## D5: Documentation, CHANGELOG, version bump ✅
+
+**Built:**
+- Added a `coderace review` section to `README.md` after `coderace diff`
+- Documented stdin, `--commit`, `--branch`, and `--cross-review` examples
+- Added a review lane reference table and flag summary
+- Added a `1.5.0` entry to `CHANGELOG.md`
+- Bumped version from `1.4.1` to `1.5.0` in `pyproject.toml` and `coderace/__init__.py`
+
+**Tests:** Full suite passing: 633 / 633 (`604` baseline + `29` new review tests)
+**Blockers:** Sandbox still blocks required git commits from this session. Requested `openclaw system event ...` was attempted twice and failed due a local gateway closure (`ws://127.0.0.1:18789`, code `1006`).
+
+## Final Summary
+
+- All five deliverables for `all-day-build-contract-review-mode.md` are implemented
+- `coderace review` now supports multi-lane Phase 1 review, optional Phase 2 cross-review, markdown/JSON reports, stdin/file/commit/branch diff sources, and full CLI integration
+- Review mode shipped with docs, changelog, version bump, a realistic patch fixture, and 29 new tests
+- Final validation: `633 passed in 5.29s`
+- Outstanding environment blockers: git commits could not be created because this session cannot write inside `.git`; the requested `openclaw` completion event failed twice because the local gateway closed unexpectedly

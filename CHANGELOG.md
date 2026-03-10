@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.0] - 2026-03-10
+
+### Added
+- **`coderace review`**: Run multi-lane parallel code review directly on a diff without generating a task YAML first
+- Built-in review lanes: `null-safety`, `type-safety`, `error-handling`, `contracts`, `security`, and `performance`
+- Optional **Phase 2 cross-review** (`--cross-review`) to identify missed issues, weak claims, and disagreements across first-pass findings
+- `coderace/review.py`: deterministic prompt generation, structured finding parsing, parallel review execution, and consolidated `ReviewResult`
+- `coderace/review_report.py`: markdown and JSON report rendering with lane grouping and severity summary table
+- Review-mode test coverage: unit, renderer, CLI, and end-to-end mocked-adapter integration with a canned 3-file patch fixture
+
 ## [1.4.0] - 2026-03-05
 
 ### Added

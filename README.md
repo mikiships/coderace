@@ -71,6 +71,49 @@ coderace run task.yaml
 --lint-command    Lint command to embed in the task (default: ruff check .)
 ```
 
+## `coderace review` — Run Multi-Lane PR Review Directly
+
+Run parallel review agents against a diff without generating an intermediate task YAML. Each lane isolates a specific review focus, and `--cross-review` adds a second phase that challenges the first-pass findings.
+
+```bash
+# Pipe a diff from stdin
+git diff HEAD~1 | coderace review
+
+# Review a specific commit
+coderace review --commit HEAD
+
+# Review a branch range
+coderace review --branch main...my-branch
+
+# Add phase 2 cross-review and write the report to disk
+coderace review --diff my-pr.patch --cross-review --output review.md
+```
+
+### Review Lanes
+
+| Lane | Focus |
+|------|-------|
+| `null-safety` | Null / `None` dereferences and missing guards |
+| `type-safety` | Type mismatches, coercion bugs, missing annotations |
+| `error-handling` | Uncaught exceptions, missing error paths, swallowed failures |
+| `contracts` | API contracts, preconditions, postconditions, interface mismatches |
+| `security` | Injection, auth bypass, unsafe deserialization, secrets exposure |
+| `performance` | O(n²) work, blocking calls, avoidable allocations |
+
+### Review Flags
+
+```
+--diff PATH        Read diff from file
+--commit TEXT      Generate diff from commit ref (git diff <ref>~1 <ref>)
+--branch TEXT      Generate diff from branch range (git diff <base>...<head>)
+--lanes TEXT       Comma-separated lanes
+--agents TEXT      Comma-separated agents
+--cross-review     Run a second review phase to find gaps and disagreements
+--format TEXT      markdown | json
+--output PATH      Write report to file instead of stdout
+--no-color         Plain stderr/status output
+```
+
 ## Task Format
 
 ```yaml

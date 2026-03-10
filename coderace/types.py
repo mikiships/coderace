@@ -145,6 +145,30 @@ class AgentResult:
 
 
 @dataclass
+class LaneFinding:
+    """A structured finding emitted by a review lane."""
+
+    lane: str
+    agent: str
+    severity: str
+    finding: str
+    location: str | None
+
+
+@dataclass
+class ReviewResult:
+    """Consolidated result from a multi-lane review run."""
+
+    diff_summary: dict[str, object]
+    lanes: list[str]
+    phase1_findings: list[LaneFinding]
+    phase2_findings: list[LaneFinding]
+    agents_used: list[str]
+    elapsed_seconds: float
+    timestamp: str
+
+
+@dataclass
 class ScoreBreakdown:
     """Per-metric scores before weighting."""
 
