@@ -1,0 +1,101 @@
+# coderace PR Review — Example Workflow
+#
+# Copies this file into .github/workflows/ in your repo to enable
+# automated multi-lane AI code review on every pull request.
+#
+# coderace races multiple AI agents (Claude Code, Codex, Gemini) on
+# separate review lanes (security, logic, style, tests), then runs
+# a cross-review pass where agents check each other's findings.
+# Results are posted as a PR comment with per-lane breakdowns and
+# agreement scoring.
+#
+# Required secrets:
+#   ANTHROPIC_API_KEY   — for Claude Code agent
+#   OPENAI_API_KEY      — for Codex agent
+#   GEMINI_API_KEY      — for Gemini agent (optional)
+#
+# Only the agents you configure (via the `agents` input) need API keys.
+
+name: coderace PR Review
+
+on:
+  pull_request:
+    # Run on every PR update.  To save costs, restrict to specific branches:
+    # branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read        # needed to checkout + git diff
+      pull-requests: write  # needed to post the PR comment
+
+    steps:
+      # Fetch full history so git diff against base branch works correctly.
+      # fetch-depth: 0 is required for the "pr" diff source.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Install any agent CLIs you want to use.
+      # Comment out the agents you don't have API keys for.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Install Codex
+        run: npm install -g @openai/codex
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      # Run coderace in review mode.
+      # The action auto-extracts the PR diff (diff-source: pr) and
+      # posts results as a PR comment.
+      - name: Run coderace review
+        uses: mikiships/coderace@v1.6.0
+        with:
+          mode: review
+
+          # Diff source: "pr" automatically diffs HEAD against the PR base branch.
+          # Other options:
+          #   commit:<sha>          — diff a specific commit
+          #   branch:<base>...<head> — explicit branch range
+          #   file:<path>           — read diff from a file
+          diff-source: pr
+
+          # Agents to use for reviewing.  Each agent runs one or more lanes.
+          # Remove agents you don't have API keys for.
+          agents: claude,codex
+
+          # Review lanes (optional — uses coderace defaults if omitted).
+          # Default lanes: security, logic, style, tests
+          # lanes: security,logic,style,tests
+
+          # Number of cross-review agents (Phase 2).
+          # Set to 0 to skip cross-review and only run Phase 1 lanes.
+          cross-reviewers: 2
+
+          # Optional: save JSON output as a workflow artifact.
+          json-out: /tmp/coderace-review.json
+
+          # GitHub token for posting the PR comment.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+        env:
+          # Pass API keys as environment variables so agent CLIs can use them.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # Optional: upload the JSON results as a workflow artifact for later analysis.
+      - name: Upload review JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coderace-review-results
+          path: /tmp/coderace-review.json
+          if-no-files-found: ignore
