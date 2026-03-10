@@ -1,6 +1,6 @@
 # All-Day Build Contract: Context Eval
 
-Status: In Progress
+Status: COMPLETE
 Date: 2026-03-02
 Owner: Codex execution pass
 Scope type: Deliverable-gated (no hour promises)
