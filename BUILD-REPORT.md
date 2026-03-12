@@ -1,22 +1,41 @@
-# coderace v1.8.0 — Build Report
-Date: 2026-03-12
-Version: 1.8.0
-PyPI: https://pypi.org/project/coderace/1.8.0/
+# coderace v1.9.0 Build Report
 
-## Deliverables
-- [x] D1: Maintainer rubric evaluator (`coderace/maintainer_rubric.py`) — 5 dimension scorers + `MaintainerRubric` dataclass + `score_rubric()` composite. Pure static analysis, no LLM.
-- [x] D2: CLI integration — `coderace review --maintainer-mode` and `coderace benchmark --maintainer-mode` flags added
-- [x] D3: Rich display (`coderace/display.py` — `MaintainerRubricDisplay`) + markdown/JSON report helpers in `review_report.py`
-- [x] D4: 31 new tests in `tests/test_maintainer_rubric.py` (5 scorers × 3 cases + composite + display + CLI + JSON)
-- [x] D5: README "Maintainer Rubric" section, CHANGELOG v1.8.0 entry, pyproject.toml bumped to 1.8.0, PyPI published, GitHub tagged v1.8.0
+**Built:** 2026-03-12  
+**Version:** 1.9.0  
+**Commit:** 19d65382e908d292b0e42003f98cdf7832fea49a  
+**Tests:** 729 passing (700 baseline + 29 new)  
+**PyPI:** https://pypi.org/project/coderace/1.9.0/
 
-## Tests
-700 passed (669 baseline + 31 new)
+---
 
-## Notes
-- All 5 dimension scorers are pure static analysis working on unified diff text
-- `score_rubric()` accepts optional `allowed_paths` (for scope_discipline) and custom `weights`
-- `MaintainerRubricDisplay` uses Rich table with Green/Yellow/Red coloring (≥80/50-79/<50)
-- JSON output: `render_review_json_with_rubric()` adds `maintainer_rubric` key to existing JSON shape
-- `coderace benchmark --maintainer-mode` renders an infrastructure table; full diff-based scoring for benchmark tasks requires per-task diff exposure (not yet in benchmark engine)
-- PyPI publish used `UV_PUBLISH_TOKEN` env var with token from `~/.pypirc`
+## What was built
+
+**CI Quality Gate** — makes the maintainer rubric enforceable in CI.
+
+METR published research (Mar 2026) showing ~50% of SWE-bench-passing PRs would be rejected by real maintainers. coderace v1.8.0 shipped the rubric as a diagnostic. v1.9.0 makes it a gate.
+
+### D1: `--min-score` on `coderace review --maintainer-mode`
+- New `--min-score N` flag (0-100 int)
+- Exits 1 when composite rubric score < N
+- Prints `✅ Maintainer score 87 ≥ 80 (gate: PASS)` or `❌ Maintainer score 54 < 80 (gate: FAIL)`
+- Without `--min-score`: existing behavior unchanged
+
+### D2: `coderace gate` standalone command
+- `coderace gate --diff <file|-> --min-score 80`
+- Accepts diff via file path or stdin (`--diff -`)
+- Exits 0 (pass) or 1 (fail)
+- `--json` flag for CI log parsing (score, gate, dimensions)
+- Pure static analysis — no LLM, no API keys required
+
+### D3: GitHub Action update
+- New `action.yml` input: `maintainer-min-score` (default: empty = no gate, backward compatible)
+- New `scripts/ci-gate.sh` CI script handling all diff sources
+- Example workflow: `.github/workflows/examples/coderace-quality-gate.yml`
+
+### D4: Tests (29 new)
+- `tests/test_ci_gate.py` — 29 tests covering gate pass/fail, threshold edge cases, empty diff, JSON output, error handling, --min-score on review, action.yml structure
+
+### D5: Docs
+- README: "CI Quality Gate" section with one-liner examples and GitHub Action snippet
+- CHANGELOG: v1.9.0 entry
+- Version bumped: 1.8.0 → 1.9.0

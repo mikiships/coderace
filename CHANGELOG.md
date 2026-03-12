@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.0.0] - 2026-03-12
+
+### Added
+- `coderace trend` command: visualize agent score progression over time
+  - Summary table: Agent | Task | Runs | Avg Score | Best Score | Latest Score | Trend
+  - Unicode sparkline in Trend column (`▁▂▃▄▅▆▇█`) with delta arrow (`↑ +8.3` / `↓ -2.1` / `→ 0.0`)
+  - Color-coded output: green (improving), red (regressing), white (flat)
+  - `--agent`: filter to one agent and show detailed per-task score history
+  - `--task`: filter to one task
+  - `--days N`: look back N days (default: 30)
+  - `--format terminal|markdown|json`: multiple output formats
+  - `--format json` returns structured `{ agent, task, runs, summary }` suitable for CI
+  - Graceful empty-DB handling (no error, helpful message)
+  - 32 new tests covering unit logic, edge cases, and CLI integration
+
 ## [1.9.0] - 2026-03-12
 
 ### Added

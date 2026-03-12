@@ -1109,6 +1109,83 @@ def dashboard(
 
 
 @app.command()
+def trend(
+    agent: str | None = typer.Option(
+        None, "--agent", help="Filter by agent name (also enables detailed per-task view)"
+    ),
+    task: str | None = typer.Option(
+        None, "--task", help="Filter by task name"
+    ),
+    days: int = typer.Option(
+        30, "--days", help="Look back this many days (default: 30)"
+    ),
+    fmt: str | None = typer.Option(
+        None,
+        "--format",
+        "-F",
+        help="Output format: terminal (default) | markdown | json",
+    ),
+) -> None:
+    """Visualize agent score progression over time."""
+    import sys
+
+    from coderace.commands.trend import (
+        _build_trends,
+        format_trend_json,
+        format_trend_markdown,
+        format_trend_terminal,
+    )
+    from coderace.store import ResultStore
+
+    try:
+        store = ResultStore()
+    except Exception as exc:
+        console.print(f"[red]Cannot open result store: {exc}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        since = f"{days}d"
+        # Fetch runs with optional filters; use a generous limit
+        from coderace.store import _parse_since
+        from coderace.store import get_db_path
+        import sqlite3
+
+        # Get all runs within the time window, filtered by agent/task
+        db_path = get_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        runs = store.get_runs(
+            task_name=task,
+            agent=agent,
+            limit=10000,
+        )
+        # Apply date filter manually since get_runs doesn't support since
+        if days:
+            cutoff = _parse_since(f"{days}d")
+            if cutoff:
+                runs = [r for r in runs if r.timestamp >= cutoff]
+    finally:
+        store.close()
+
+    trends = _build_trends(runs, agent_filter=agent, task_filter=task)
+
+    if not trends:
+        console.print("[yellow]No trend data found. Run some races first.[/yellow]")
+        return
+
+    if fmt == "markdown":
+        sys.stdout.write(format_trend_markdown(trends, detail_agent=agent))
+    elif fmt == "json":
+        sys.stdout.write(format_trend_json(trends))
+    elif fmt is not None and fmt != "terminal":
+        console.print(
+            f"[red]Unknown --format {fmt!r}. Choose: terminal, markdown, json[/red]"
+        )
+        raise typer.Exit(1)
+    else:
+        format_trend_terminal(trends, detail_agent=agent, console=console)
+
+
+@app.command()
 def version() -> None:
     """Show coderace version."""
     console.print(f"coderace {__version__}")
