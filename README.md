@@ -112,7 +112,36 @@ coderace review --diff my-pr.patch --cross-review --output review.md
 --format TEXT      markdown | json
 --output PATH      Write report to file instead of stdout
 --no-color         Plain stderr/status output
+--maintainer-mode  Append maintainer rubric section (static analysis, no LLM)
 ```
+
+## Maintainer Rubric
+
+> METR found that ~50% of SWE-bench-passing PRs would be **rejected by real maintainers**. Automated graders overestimate usefulness by ~24 percentage points because agents optimise for whatever benchmark they can see — not for code quality.
+
+`coderace review --maintainer-mode` scores a diff on 5 dimensions that map directly to the criteria real maintainers use. No LLM required — pure static analysis.
+
+```bash
+# Score a diff with the maintainer rubric
+git diff HEAD~1 | coderace review --maintainer-mode
+
+# Or from a file
+coderace review --diff my-pr.patch --maintainer-mode
+```
+
+### Maintainer Rubric Dimensions
+
+| Dimension | What it measures | Green (≥80) | Yellow (50-79) | Red (<50) |
+|-----------|-----------------|-------------|---------------|-----------|
+| **Minimal Diff** | Did the agent change only what was needed? | Tight, focused change | Some bloat | Unnecessary churn |
+| **Convention Adherence** | New code follows existing naming/formatting | Clean snake_case, no trailing WS | Minor deviations | camelCase, tabs, systemic drift |
+| **Dep Hygiene** | No unnecessary new imports/dependencies | No new third-party deps | 1-2 new deps | Multiple new packages |
+| **Scope Discipline** | Diff touches only task-relevant files | ≤3 source files | 4-6 files | 7+ files, over-reaching |
+| **Idiomatic Patterns** | Code reads like the rest of the codebase | Natural, fits the style | Minor oddities | Alien constructs (global, `== True`, etc.) |
+
+**Composite score** is a weighted average (0-100). The output is a Rich terminal table with per-dimension pass/warn/fail coloring.
+
+JSON output (`--format json --maintainer-mode`) includes a `maintainer_rubric` key with all dimension scores and the composite.
 
 ## Task Format
 

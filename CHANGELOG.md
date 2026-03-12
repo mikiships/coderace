@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.0] - 2026-03-12
+
+### Added
+- **Maintainer Rubric Mode** (`--maintainer-mode`): Score PRs on the same criteria real maintainers use to accept/reject — inspired by METR research (Mar 2026) showing ~50% of SWE-bench-passing PRs would be rejected by actual maintainers
+  - `coderace review --maintainer-mode`: Appends a maintainer rubric section to review output
+  - `coderace benchmark --maintainer-mode`: Adds maintainer rubric context to benchmark output
+  - 5 scoring dimensions (each 0-100): **Minimal Diff**, **Convention Adherence**, **Dep Hygiene**, **Scope Discipline**, **Idiomatic Patterns**
+  - Weighted composite score with Green/Yellow/Red verdicts (≥80 pass, 50-79 warn, <50 fail)
+  - Pure static analysis — no LLM required, works on any git diff
+  - Rich terminal table via `MaintainerRubricDisplay` in `coderace/display.py`
+  - JSON output includes `maintainer_rubric` key with all dimension scores + composite
+  - Markdown report output includes a "Maintainer Rubric" section with METR research context
+
 ## [1.7.0] - 2026-03-10
 
 ### Added

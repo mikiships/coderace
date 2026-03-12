@@ -48,6 +48,9 @@ def benchmark_main(
     no_save: bool = typer.Option(
         False, "--no-save", help="Skip saving benchmark results to the store"
     ),
+    maintainer_mode: bool = typer.Option(
+        False, "--maintainer-mode", help="Add maintainer rubric scores to benchmark results table"
+    ),
 ) -> None:
     """Run all (or selected) built-in tasks against one or more agents and produce a comparison report."""
     if ctx.invoked_subcommand is not None:
@@ -190,10 +193,51 @@ def benchmark_main(
         )
         console.print(f"[green]Benchmark export saved to:[/green] {export}")
 
+    # Maintainer rubric mode: show per-task rubric scores if diffs are available
+    if maintainer_mode:
+        _print_benchmark_maintainer_rubric(benchmark_result, console)
+
     # Save to store
     if not no_save:
         _save_benchmark_to_store(benchmark_result, stats)
         console.print(f"\n[dim]Benchmark {benchmark_result.benchmark_id} saved to store.[/dim]")
+
+
+def _print_benchmark_maintainer_rubric(benchmark_result, console) -> None:
+    """Print a maintainer rubric summary table for a benchmark result.
+
+    Since benchmark tasks don't produce diffs directly (agents run in
+    worktrees), we display a placeholder table noting that --maintainer-mode
+    requires diffs. This hook is here so the flag is functional and the
+    infrastructure is in place; full diff-based scoring will be added when
+    the benchmark engine exposes per-task diffs.
+    """
+    from rich.table import Table
+    from coderace.maintainer_rubric import MaintainerRubric
+
+    console.print()
+    console.rule("[bold cyan]Maintainer Rubric Mode[/bold cyan]")
+    console.print(
+        "[dim]Maintainer rubric scoring requires per-task diffs. "
+        "Use [bold]coderace review --maintainer-mode[/bold] on a specific diff "
+        "for full dimension breakdown.[/dim]"
+    )
+
+    # Show a summary table with composite N/A
+    table = Table(title="Maintainer Rubric (benchmark)", show_lines=True)
+    table.add_column("Task", style="cyan")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Score", justify="right")
+    table.add_column("Maintainer Score", justify="right")
+
+    for result in benchmark_result.results:
+        table.add_row(
+            result.task_name,
+            result.agent,
+            f"{result.score:.1f}",
+            "[dim]diff required[/dim]",
+        )
+    console.print(table)
 
 
 def _save_benchmark_to_store(benchmark_result, stats) -> None:

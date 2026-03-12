@@ -7,6 +7,7 @@ import json
 
 from coderace.review import SEVERITY_LEVELS
 from coderace.types import LaneFinding, ReviewResult
+from coderace.maintainer_rubric import MaintainerRubric, score_rubric
 
 
 def render_review_markdown(result: ReviewResult) -> str:
@@ -68,6 +69,48 @@ def render_review_markdown(result: ReviewResult) -> str:
         )
         lines.append(f"| {_display_lane_name(severity)} | {count} |")
 
+    return "\n".join(lines) + "\n"
+
+
+def render_review_markdown_with_rubric(result: ReviewResult, diff_text: str) -> str:
+    """Render a ReviewResult as markdown with an appended Maintainer Rubric section."""
+    base = render_review_markdown(result)
+    rubric = score_rubric(diff_text)
+    rubric_section = _render_rubric_markdown(rubric)
+    return base + "\n" + rubric_section
+
+
+def render_review_json_with_rubric(result: ReviewResult, diff_text: str) -> str:
+    """Render a ReviewResult as JSON with a maintainer_rubric key added."""
+    data = asdict(result)
+    rubric = score_rubric(diff_text)
+    data["maintainer_rubric"] = rubric.as_dict()
+    return json.dumps(data, indent=2) + "\n"
+
+
+def _render_rubric_markdown(rubric: MaintainerRubric) -> str:
+    """Render a MaintainerRubric as a markdown section."""
+    verdict = "✅ Likely accepted" if rubric.composite >= 80 else (
+        "⚠️ Review needed" if rubric.composite >= 50 else "❌ Likely rejected"
+    )
+    lines = [
+        "---",
+        "",
+        "## Maintainer Rubric",
+        "",
+        f"> METR research (Mar 2026): ~50% of SWE-bench-passing PRs would be rejected by real maintainers.",
+        "",
+        f"**Composite score:** {rubric.composite:.1f} / 100  {verdict}",
+        "",
+        "| Dimension | Score | Verdict |",
+        "|-----------|------:|---------|",
+        f"| Minimal Diff | {rubric.minimal_diff:.1f} | {'✅' if rubric.minimal_diff >= 80 else ('⚠️' if rubric.minimal_diff >= 50 else '❌')} |",
+        f"| Convention Adherence | {rubric.convention_adherence:.1f} | {'✅' if rubric.convention_adherence >= 80 else ('⚠️' if rubric.convention_adherence >= 50 else '❌')} |",
+        f"| Dep Hygiene | {rubric.dep_hygiene:.1f} | {'✅' if rubric.dep_hygiene >= 80 else ('⚠️' if rubric.dep_hygiene >= 50 else '❌')} |",
+        f"| Scope Discipline | {rubric.scope_discipline:.1f} | {'✅' if rubric.scope_discipline >= 80 else ('⚠️' if rubric.scope_discipline >= 50 else '❌')} |",
+        f"| Idiomatic Patterns | {rubric.idiomatic_patterns:.1f} | {'✅' if rubric.idiomatic_patterns >= 80 else ('⚠️' if rubric.idiomatic_patterns >= 50 else '❌')} |",
+        "",
+    ]
     return "\n".join(lines) + "\n"
 
 

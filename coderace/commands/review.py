@@ -12,6 +12,8 @@ from rich.console import Console
 from coderace.adapters import ADAPTERS, parse_agent_spec
 from coderace.review import DEFAULT_REVIEW_AGENTS, DEFAULT_REVIEW_LANES, run_review
 from coderace.review_report import render_review_json, render_review_markdown
+from coderace.maintainer_rubric import score_rubric
+from coderace.display import MaintainerRubricDisplay
 
 app = typer.Typer(
     help="Run multi-lane parallel agent review on a diff.",
@@ -119,6 +121,11 @@ def review_main(
         "--no-color",
         help="Plain output (no rich markup)",
     ),
+    maintainer_mode: bool = typer.Option(
+        False,
+        "--maintainer-mode",
+        help="Append maintainer rubric section to review output (static analysis, no LLM)",
+    ),
 ) -> None:
     """Run multi-lane parallel agent review on a diff."""
     if ctx.invoked_subcommand is not None:
@@ -170,6 +177,20 @@ def review_main(
     if output is not None:
         output.write_text(rendered, encoding="utf-8")
         console.print(f"[green]Review report written to:[/green] {output}")
+        if maintainer_mode:
+            _append_maintainer_rubric(diff_text, console, no_color)
         return
 
     typer.echo(rendered, nl=False)
+
+    if maintainer_mode:
+        _append_maintainer_rubric(diff_text, console, no_color)
+
+
+def _append_maintainer_rubric(diff_text: str, console: Console, no_color: bool) -> None:
+    """Score the diff with the maintainer rubric and print the result."""
+    rubric = score_rubric(diff_text)
+    display_console = Console(no_color=no_color)
+    display = MaintainerRubricDisplay()
+    display_console.print()
+    display.print(rubric, console=display_console)
