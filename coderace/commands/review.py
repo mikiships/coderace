@@ -126,6 +126,13 @@ def review_main(
         "--maintainer-mode",
         help="Append maintainer rubric section to review output (static analysis, no LLM)",
     ),
+    min_score: int | None = typer.Option(
+        None,
+        "--min-score",
+        help="Minimum maintainer rubric score (0-100). Requires --maintainer-mode. Exit 1 if score < min-score.",
+        min=0,
+        max=100,
+    ),
 ) -> None:
     """Run multi-lane parallel agent review on a diff."""
     if ctx.invoked_subcommand is not None:
@@ -178,19 +185,44 @@ def review_main(
         output.write_text(rendered, encoding="utf-8")
         console.print(f"[green]Review report written to:[/green] {output}")
         if maintainer_mode:
-            _append_maintainer_rubric(diff_text, console, no_color)
+            exit_code = _append_maintainer_rubric(diff_text, console, no_color, min_score=min_score)
+            raise typer.Exit(exit_code)
         return
 
     typer.echo(rendered, nl=False)
 
     if maintainer_mode:
-        _append_maintainer_rubric(diff_text, console, no_color)
+        exit_code = _append_maintainer_rubric(diff_text, console, no_color, min_score=min_score)
+        raise typer.Exit(exit_code)
 
 
-def _append_maintainer_rubric(diff_text: str, console: Console, no_color: bool) -> None:
-    """Score the diff with the maintainer rubric and print the result."""
+def _append_maintainer_rubric(
+    diff_text: str,
+    console: Console,
+    no_color: bool,
+    min_score: int | None = None,
+) -> int:
+    """Score the diff with the maintainer rubric and print the result.
+
+    Returns exit code: 0 (pass) or 1 (fail, only when min_score is set).
+    """
     rubric = score_rubric(diff_text)
     display_console = Console(no_color=no_color)
     display = MaintainerRubricDisplay()
     display_console.print()
     display.print(rubric, console=display_console)
+
+    if min_score is not None:
+        score_int = round(rubric.composite)
+        if rubric.composite >= min_score:
+            display_console.print(
+                f"✅ Maintainer score {score_int} ≥ {min_score} (gate: PASS)"
+            )
+            return 0
+        else:
+            display_console.print(
+                f"❌ Maintainer score {score_int} < {min_score} (gate: FAIL)"
+            )
+            return 1
+
+    return 0

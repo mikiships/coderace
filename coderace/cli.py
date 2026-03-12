@@ -31,6 +31,7 @@ from coderace.commands.benchmark import app as benchmark_app
 from coderace.commands.context_eval import app as context_eval_app
 from coderace.commands.race import app as race_app
 from coderace.commands.review import app as review_app
+from coderace.commands.gate import app as gate_app
 
 app = typer.Typer(
     name="coderace",
@@ -42,6 +43,7 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(context_eval_app, name="context-eval")
 app.add_typer(race_app, name="race")
 app.add_typer(review_app, name="review")
+app.add_typer(gate_app, name="gate")
 console = Console()
 
 

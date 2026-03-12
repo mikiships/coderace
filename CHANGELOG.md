@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.0] - 2026-03-12
+
+### Added
+- **CI Quality Gate** (`coderace gate`): Enforce the maintainer rubric as a hard CI gate — inspired by METR research showing ~50% of AI-generated PRs fail real maintainer review
+  - `coderace gate --diff <file|-> --min-score 80`: Exits 0 (pass) or 1 (fail) based on composite rubric score
+  - Accepts diff via file path or stdin (`--diff -`)
+  - `--json` flag for structured CI log output (score, gate, dimensions)
+  - Pure static analysis — no LLM, no API keys required
+- **`--min-score` flag on `coderace review --maintainer-mode`**: Gate directly within review workflow
+  - `coderace review --maintainer-mode --min-score 80`: Exits 1 when score < threshold
+  - Prints `✅ Maintainer score 87 ≥ 80 (gate: PASS)` or `❌ Maintainer score 54 < 80 (gate: FAIL)`
+- **GitHub Action `maintainer-min-score` input**: Add 3 lines to your workflow to gate AI PRs
+  - New input: `maintainer-min-score` (default: empty = no gate, backward compatible)
+  - Runs `coderace gate` and posts rubric breakdown as a PR comment on failure
+  - New `scripts/ci-gate.sh` CI script
+- **Example workflow**: `.github/workflows/examples/coderace-quality-gate.yml` — copy-paste ready
+
 ## [1.8.0] - 2026-03-12
 
 ### Added

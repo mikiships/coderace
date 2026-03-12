@@ -1,0 +1,40 @@
+# coderace-quality-gate.yml
+#
+# Example: maintainer quality gate for AI-generated PRs.
+#
+# Blocks merges when the maintainer rubric composite score is below the
+# configured threshold. Inspired by METR research showing ~50% of
+# SWE-bench-passing PRs would be rejected by real maintainers.
+#
+# Usage:
+#   1. Copy this file to .github/workflows/coderace-quality-gate.yml
+#   2. Adjust maintainer-min-score to your desired threshold (0-100)
+#   3. The gate runs on every PR automatically
+
+name: coderace quality gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  quality-gate:
+    name: Maintainer quality gate
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # for posting the rubric breakdown as a comment
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # required for git diff against base branch
+
+      - name: Run coderace maintainer gate
+        uses: mikiships/coderace@v1
+        with:
+          mode: gate
+          maintainer-min-score: 80   # adjust threshold here
+          diff-source: pr
+          github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -47,6 +47,10 @@ inputs:
     description: 'GitHub token for posting PR comments (uses GITHUB_TOKEN if not set)'
     required: false
     default: ${{ github.token }}
+  maintainer-min-score:
+    description: 'Minimum maintainer rubric score (0-100). When set, runs coderace gate and fails the step if score is below threshold. Leave empty to skip the gate.'
+    required: false
+    default: ''
   coderace-version:
     description: 'coderace version to install (e.g. "0.3.0" or "latest")'
     required: false
@@ -140,6 +144,34 @@ runs:
         else
           echo "<!-- coderace-review -->" > /tmp/coderace-review-comment.md
           echo "**coderace review**: no results." >> /tmp/coderace-review-comment.md
+        fi
+
+    # -----------------------------------------------------------------------
+    # mode: gate — maintainer quality gate (new in v1.9.0)
+    # -----------------------------------------------------------------------
+    - name: Maintainer quality gate
+      id: gate
+      if: inputs.maintainer-min-score != ''
+      shell: bash
+      env:
+        CODERACE_DIFF_SOURCE: ${{ inputs.diff-source }}
+        CODERACE_MIN_SCORE: ${{ inputs.maintainer-min-score }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+      run: ${{ github.action_path }}/scripts/ci-gate.sh
+
+    - name: Format gate PR comment
+      id: format-gate
+      if: inputs.maintainer-min-score != '' && always()
+      shell: bash
+      run: |
+        GATE_JSON="/tmp/coderace-gate-result.json"
+        if [ -f "${GATE_JSON}" ]; then
+          python "${{ github.action_path }}/scripts/format-gate-comment.py" \
+            --json-file "${GATE_JSON}" \
+            --output /tmp/coderace-gate-comment.md
+        else
+          echo "<!-- coderace-gate -->" > /tmp/coderace-gate-comment.md
+          echo "**coderace gate**: no results." >> /tmp/coderace-gate-comment.md
         fi
 
     # -----------------------------------------------------------------------

@@ -600,6 +600,52 @@ When to use each mode:
 
 The goal isn't "which model is best." It's "which agent solves my specific problem best."
 
+## CI Quality Gate
+
+Block AI-generated PRs that score below your maintainer rubric threshold. Directly inspired by [METR research](https://metr.org) showing ~50% of SWE-bench-passing PRs would be rejected by real maintainers.
+
+### One-liner gate
+
+```bash
+# Exit 1 if composite rubric score < 80
+coderace gate --diff changes.patch --min-score 80
+
+# From stdin (CI pipelines)
+git diff HEAD~1 | coderace gate --diff - --min-score 75
+
+# JSON output for CI log parsing
+coderace gate --diff pr.diff --min-score 80 --json
+```
+
+Output:
+```
+✅ Maintainer score 87 ≥ 80 (gate: PASS)
+❌ Maintainer score 54 < 80 (gate: FAIL)
+```
+
+### Within review workflow
+
+```bash
+coderace review --diff pr.diff --maintainer-mode --min-score 80
+```
+
+### GitHub Action (3 lines)
+
+```yaml
+- name: Run coderace
+  uses: mikiships/coderace@v1
+  with:
+    maintainer-min-score: 80   # gate at score 80/100
+    diff-source: pr
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+A full copy-paste example is at `.github/workflows/examples/coderace-quality-gate.yml`.
+
+The gate is **pure static analysis** — no LLM, no API keys required.
+
+---
+
 ## CI Integration
 
 Use coderace in GitHub Actions to automatically race agents on PRs and post results as comments.
